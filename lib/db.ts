@@ -1,5 +1,7 @@
-import { sql } from '@vercel/postgres'
+import { neon } from '@neondatabase/serverless'
 import type { Lead, Contact, Pattern, Outreach, LeadWithContacts } from './types'
+
+const sql = neon(process.env.POSTGRES_URL!)
 
 export async function setupDatabase() {
   await sql`
@@ -51,7 +53,6 @@ export async function setupDatabase() {
     )
   `
 
-  // Seed pattern rows
   const useCases = ['payments', 'yield', 'treasury', 'tokenization']
   for (const uc of useCases) {
     for (const tier of [1, 2]) {
@@ -65,7 +66,7 @@ export async function setupDatabase() {
 }
 
 export async function getPendingLeads(limit = 10): Promise<Lead[]> {
-  const { rows } = await sql`
+  const rows = await sql`
     SELECT * FROM leads
     WHERE status = 'pending'
        OR (status = 'snoozed' AND snooze_until < NOW())
@@ -76,7 +77,7 @@ export async function getPendingLeads(limit = 10): Promise<Lead[]> {
 }
 
 export async function getPendingLeadCount(): Promise<number> {
-  const { rows } = await sql`
+  const rows = await sql`
     SELECT COUNT(*)::int AS count FROM leads
     WHERE status = 'pending'
   `
@@ -84,18 +85,18 @@ export async function getPendingLeadCount(): Promise<number> {
 }
 
 export async function getAcceptedLeads(): Promise<LeadWithContacts[]> {
-  const { rows: leads } = await sql`
+  const leads = await sql`
     SELECT * FROM leads WHERE status = 'accepted'
     ORDER BY swiped_at DESC
   `
 
   return Promise.all(
     (leads as Lead[]).map(async (lead) => {
-      const { rows: contacts } = await sql`
+      const contacts = await sql`
         SELECT * FROM contacts WHERE lead_id = ${lead.id}
         ORDER BY is_primary DESC
       `
-      const { rows: outreach } = await sql`
+      const outreach = await sql`
         SELECT * FROM outreach WHERE lead_id = ${lead.id}
         ORDER BY generated_at DESC
       `
@@ -120,7 +121,7 @@ export async function recordSwipe(leadId: string, direction: 'right' | 'left' | 
     WHERE id = ${leadId}
   `
 
-  const { rows } = await sql`SELECT use_case, tier FROM leads WHERE id = ${leadId}`
+  const rows = await sql`SELECT use_case, tier FROM leads WHERE id = ${leadId}`
   if (!rows[0]) return
 
   const { use_case, tier } = rows[0]
@@ -140,7 +141,7 @@ export async function recordSwipe(leadId: string, direction: 'right' | 'left' | 
 }
 
 export async function getPatterns(): Promise<Pattern[]> {
-  const { rows } = await sql`
+  const rows = await sql`
     SELECT * FROM swipe_patterns ORDER BY use_case, tier
   `
   return rows as Pattern[]
@@ -154,7 +155,7 @@ export async function insertLead(lead: {
   tier: number
   why_boundless_fits: string
 }): Promise<Lead> {
-  const { rows } = await sql`
+  const rows = await sql`
     INSERT INTO leads (company_name, description, signal, use_case, tier, why_boundless_fits)
     VALUES (${lead.company_name}, ${lead.description}, ${lead.signal}, ${lead.use_case}, ${lead.tier}, ${lead.why_boundless_fits})
     RETURNING *
@@ -169,7 +170,7 @@ export async function insertContact(contact: {
   linkedin_url: string
   is_primary: boolean
 }): Promise<Contact> {
-  const { rows } = await sql`
+  const rows = await sql`
     INSERT INTO contacts (lead_id, name, title, linkedin_url, is_primary)
     VALUES (${contact.lead_id}, ${contact.name}, ${contact.title}, ${contact.linkedin_url}, ${contact.is_primary})
     RETURNING *
@@ -183,7 +184,7 @@ export async function insertOutreach(outreach: {
   type: string
   content: string
 }): Promise<Outreach> {
-  const { rows } = await sql`
+  const rows = await sql`
     INSERT INTO outreach (lead_id, contact_id, type, content)
     VALUES (${outreach.lead_id}, ${outreach.contact_id}, ${outreach.type}, ${outreach.content})
     RETURNING *
@@ -192,16 +193,16 @@ export async function insertOutreach(outreach: {
 }
 
 export async function getExistingCompanyNames(): Promise<string[]> {
-  const { rows } = await sql`SELECT LOWER(company_name) AS name FROM leads`
+  const rows = await sql`SELECT LOWER(company_name) AS name FROM leads`
   return rows.map((r) => r.name as string)
 }
 
 export async function getLeadById(id: string): Promise<Lead | null> {
-  const { rows } = await sql`SELECT * FROM leads WHERE id = ${id}`
+  const rows = await sql`SELECT * FROM leads WHERE id = ${id}`
   return (rows[0] as Lead) || null
 }
 
 export async function getContactById(id: string): Promise<Contact | null> {
-  const { rows } = await sql`SELECT * FROM contacts WHERE id = ${id}`
+  const rows = await sql`SELECT * FROM contacts WHERE id = ${id}`
   return (rows[0] as Contact) || null
 }
