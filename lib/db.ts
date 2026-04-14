@@ -217,3 +217,11 @@ export async function getContactById(id: string): Promise<Contact | null> {
   const rows = await sql`SELECT * FROM contacts WHERE id = ${id}`
   return (rows[0] as Contact) || null
 }
+
+export async function deletePendingLeads(): Promise<number> {
+  const rows = await sql`
+    DELETE FROM leads WHERE status = 'pending' OR status = 'snoozed'
+    RETURNING id
+  `
+  return rows.length
+}

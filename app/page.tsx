@@ -8,6 +8,7 @@ export default function HomePage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const generatingRef = useRef(false)
 
@@ -49,6 +50,18 @@ export default function HomePage() {
       loadMore()
     }
   }, [leads.length, isLoading, loadMore])
+
+  const resetDeck = useCallback(async () => {
+    setIsResetting(true)
+    setLeads([])
+    try {
+      await fetch('/api/leads/reset', { method: 'POST' })
+      const res = await fetch('/api/leads')
+      if (res.ok) setLeads(await res.json())
+    } finally {
+      setIsResetting(false)
+    }
+  }, [])
 
   const handleSwipe = useCallback(
     async (leadId: string, direction: 'right' | 'left' | 'down') => {
@@ -96,16 +109,28 @@ export default function HomePage() {
             <p className="text-xs text-gray-400 mt-0.5">
               {isLoading
                 ? 'Loading...'
-                : `${leads.length} in deck${isGenerating ? ' · finding more' : ''}`}
+                : isResetting
+                  ? 'Clearing old leads...'
+                  : `${leads.length} in deck${isGenerating ? ' · finding more' : ''}`}
             </p>
           </div>
-          <button
-            onClick={loadMore}
-            disabled={isGenerating}
-            className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-40 transition-colors"
-          >
-            {isGenerating ? 'Loading...' : 'Refresh'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={resetDeck}
+              disabled={isGenerating || isResetting}
+              className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-40 transition-colors"
+              title="Clear old leads and generate fresh ones"
+            >
+              {isResetting ? 'Resetting...' : 'Reset deck'}
+            </button>
+            <button
+              onClick={loadMore}
+              disabled={isGenerating || isResetting}
+              className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-40 transition-colors"
+            >
+              {isGenerating ? 'Loading...' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
         <SwipeDeck
