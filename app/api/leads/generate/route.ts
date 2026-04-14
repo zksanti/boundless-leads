@@ -2,7 +2,7 @@ import { generateLeads } from '@/lib/generate-leads'
 
 export async function POST() {
   try {
-    const count = await generateLeads(10)
+    const count = await generateLeads(20)
     return Response.json({ count })
   } catch (error) {
     console.error('POST /api/leads/generate error:', error)

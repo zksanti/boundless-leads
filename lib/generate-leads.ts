@@ -40,7 +40,11 @@ export async function generateLeads(count = 20): Promise<number> {
 BOUNDLESS CONTEXT:
 Category: Compliance infrastructure for onchain finance
 Core promise: Go onchain without exposing company data
-Services: Shield Payments, Shield Treasury, Shield Yield, Shield Tokenization
+Services: Boundless Payments, Boundless Treasury, Boundless Yield, Boundless Tokenization
+- Boundless Payments: confidential stablecoin payment flows — hides transaction amounts, counterparties, routing
+- Boundless Yield: confidential onchain yield deployment — hides protocol allocations, position sizes, yield strategies
+- Boundless Treasury: confidential onchain treasury management — hides balance visibility, movement timing
+- Boundless Tokenization: compliant tokenized asset issuance with privacy on public chains
 Audience: institutions, fintechs, platforms — NOT consumers
 
 ICP — TIER 1 (prioritize):
@@ -75,11 +79,14 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
 [
   {
     "company_name": "string",
+    "website_url": "https://... (homepage URL, best guess if unsure)",
     "description": "one sentence what they do",
-    "signal": "specific qualifying signal (product launch, job posting, news, etc.)",
+    "signal": "specific qualifying signal (product launch, job posting, news, funding round, etc.)",
     "use_case": "payments" | "yield" | "treasury" | "tokenization",
     "tier": 1 | 2,
-    "why_boundless_fits": "one sentence specific to their situation"
+    "company_size": "e.g. '50-200 employees' or '~500 employees' — estimate if unsure, leave blank if truly unknown",
+    "funding": "e.g. 'Series B $45M' or 'Raised $12M seed' or 'Public: NYSE' — leave blank if truly unknown",
+    "why_boundless_fits": "2-3 sentences: name the specific Boundless service (Boundless Payments/Yield/Treasury/Tokenization), describe exactly where it plugs into their stack or product flow, and what competitive exposure problem it solves for them specifically"
   }
 ]`
 
@@ -94,10 +101,13 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
 
   let leads: Array<{
     company_name: string
+    website_url: string
     description: string
     signal: string
     use_case: string
     tier: number
+    company_size: string
+    funding: string
     why_boundless_fits: string
   }>
 
@@ -115,10 +125,13 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
     if (excluded.includes(lead.company_name.toLowerCase())) continue
     await insertLead({
       company_name: lead.company_name,
+      website_url: lead.website_url || '',
       description: lead.description || '',
       signal: lead.signal || '',
       use_case: lead.use_case,
       tier: lead.tier || 2,
+      company_size: lead.company_size || '',
+      funding: lead.funding || '',
       why_boundless_fits: lead.why_boundless_fits || '',
     })
     inserted++

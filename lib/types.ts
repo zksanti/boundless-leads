@@ -6,10 +6,13 @@ export type LeadStatus = 'pending' | 'accepted' | 'rejected' | 'snoozed'
 export interface Lead {
   id: string
   company_name: string
+  website_url: string
   description: string
   signal: string
   use_case: UseCase
   tier: Tier
+  company_size: string
+  funding: string
   why_boundless_fits: string
   status: LeadStatus
   created_at: string

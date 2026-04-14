@@ -34,9 +34,48 @@ export default function LeadCard({ lead, dimmed = false }: Props) {
           </span>
         </div>
 
-        <h2 className="text-2xl font-bold text-gray-900 mb-2 leading-tight">
-          {lead.company_name}
-        </h2>
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <h2 className="text-2xl font-bold text-gray-900 leading-tight">
+            {lead.company_name}
+          </h2>
+          {lead.website_url && (
+            <a
+              href={lead.website_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex-shrink-0 mt-1 text-gray-400 hover:text-gray-600 transition-colors"
+              title={lead.website_url}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          )}
+        </div>
+
+        {/* Company metadata */}
+        {(lead.company_size || lead.funding) && (
+          <div className="flex flex-wrap gap-3 mb-3">
+            {lead.company_size && (
+              <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {lead.company_size}
+              </span>
+            )}
+            {lead.funding && (
+              <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {lead.funding}
+              </span>
+            )}
+          </div>
+        )}
+
         <p className="text-gray-500 text-sm leading-relaxed">
           {lead.description}
         </p>

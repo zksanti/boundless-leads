@@ -8,10 +8,13 @@ export async function setupDatabase() {
     CREATE TABLE IF NOT EXISTS leads (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       company_name TEXT NOT NULL,
+      website_url TEXT DEFAULT '',
       description TEXT DEFAULT '',
       signal TEXT DEFAULT '',
       use_case TEXT NOT NULL DEFAULT 'payments',
       tier INTEGER NOT NULL DEFAULT 2,
+      company_size TEXT DEFAULT '',
+      funding TEXT DEFAULT '',
       why_boundless_fits TEXT DEFAULT '',
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -19,6 +22,11 @@ export async function setupDatabase() {
       snooze_until TIMESTAMPTZ
     )
   `
+
+  // Migrate existing tables safely
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS website_url TEXT DEFAULT ''`
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS company_size TEXT DEFAULT ''`
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS funding TEXT DEFAULT ''`
 
   await sql`
     CREATE TABLE IF NOT EXISTS contacts (
@@ -149,15 +157,18 @@ export async function getPatterns(): Promise<Pattern[]> {
 
 export async function insertLead(lead: {
   company_name: string
+  website_url: string
   description: string
   signal: string
   use_case: string
   tier: number
+  company_size: string
+  funding: string
   why_boundless_fits: string
 }): Promise<Lead> {
   const rows = await sql`
-    INSERT INTO leads (company_name, description, signal, use_case, tier, why_boundless_fits)
-    VALUES (${lead.company_name}, ${lead.description}, ${lead.signal}, ${lead.use_case}, ${lead.tier}, ${lead.why_boundless_fits})
+    INSERT INTO leads (company_name, website_url, description, signal, use_case, tier, company_size, funding, why_boundless_fits)
+    VALUES (${lead.company_name}, ${lead.website_url}, ${lead.description}, ${lead.signal}, ${lead.use_case}, ${lead.tier}, ${lead.company_size}, ${lead.funding}, ${lead.why_boundless_fits})
     RETURNING *
   `
   return rows[0] as Lead
