@@ -3,32 +3,37 @@ import type { Lead, Contact } from './types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-// What actually leaks onchain per use case — the specific exposure bridge
+// What actually leaks onchain per use case — feeds the "you probably know, but..." bridge
 const USE_CASE_EXPOSURE: Record<string, { visible: string; competitive_risk: string }> = {
   payments: {
     visible:
-      'stablecoin payment flows on public chains expose transaction amounts, recipient wallet addresses, and timing — all of it readable by anyone',
+      'stablecoin payment flows expose transaction amounts, recipient wallet addresses, and timing to anyone watching the chain',
     competitive_risk:
-      'at volume, that means supplier relationships, deal sizes, and customer payment patterns are visible to competitors, analysts, and anyone else watching',
+      'at scale, that means counterparty relationships, deal sizes, and payment patterns are readable by competitors and analysts',
   },
   yield: {
     visible:
       'onchain yield deployments expose protocol allocations, position sizes, and rotation timing in real-time',
     competitive_risk:
-      'competitors and LPs can see exactly where capital is deployed, how much, and when it moves — making it trivial to front-run strategy or infer AUM',
+      'competitors and LPs can see exactly where capital is deployed and when it moves, making it trivial to infer strategy or AUM',
   },
   treasury: {
     visible:
-      'onchain treasury holdings make wallet balances, incoming transfers (including fundraising), and operational spend publicly readable',
+      'onchain treasury holdings make wallet balances, incoming transfers, and operational spend publicly readable',
     competitive_risk:
-      'anyone who identifies the wallet address can track runway, financial health, and burn rate — including journalists, competitors, and prospective hires',
+      'anyone who identifies the wallet address can track runway, financial health, and burn rate',
   },
   tokenization: {
     visible:
-      'tokenized asset transfers and redemptions are traceable — holder concentration, exit patterns, and secondary market activity all on-chain',
+      'tokenized asset transfers and redemptions are traceable — holder concentration, exit patterns, and secondary market activity all visible',
     competitive_risk:
-      'investor composition, redemption behavior, and concentration risk become visible to press and competitors, undermining fund confidentiality',
+      'investor composition, redemption behavior, and concentration risk become visible to press and competitors',
   },
+}
+
+// Extract first name from a full name string
+function firstName(fullName: string): string {
+  return fullName.trim().split(/\s+/)[0] || fullName
 }
 
 export interface OutreachResult {
@@ -42,70 +47,84 @@ export async function generateOutreach(
   contact: Contact | null
 ): Promise<OutreachResult> {
   const exposure = USE_CASE_EXPOSURE[lead.use_case] ?? USE_CASE_EXPOSURE.payments
-  const contactLine = contact ? `Contact: ${contact.name}, ${contact.title}` : ''
+  const contactFirstName = contact ? firstName(contact.name) : null
+  const contactLine = contact ? `Contact: ${contact.name}, ${contact.title}` : 'No specific contact'
 
-  const prompt = `You write first-touch cold outreach messages. The sender works in compliance infrastructure for onchain finance — they have seen how public blockchain activity creates competitive exposure for fintechs and financial platforms, and they help companies solve it.
+  const prompt = `You write first-touch cold outreach messages on behalf of the Boundless team.
+
+Boundless builds compliance infrastructure for onchain finance. Early partnerships include XRPL and Stellar teams.
 
 COMPANY BEING OUTREACHED:
 Company: ${lead.company_name}
 What they do: ${lead.description}
-Signal (what triggered this outreach — use this for the specific hook): ${lead.signal}
-Use case category: ${lead.use_case}
-Why this is relevant for them: ${lead.why_boundless_fits}
+Signal (what triggered this — use this for the hook): ${lead.signal}
+Use case: ${lead.use_case}
+Why relevant: ${lead.why_boundless_fits}
 ${contactLine}
+First name to use in greeting: ${contactFirstName ?? 'none — skip name'}
 
-ONCHAIN EXPOSURE CONTEXT FOR THIS USE CASE:
-What becomes visible: ${exposure.visible}
-The competitive risk: ${exposure.competitive_risk}
+ONCHAIN EXPOSURE FOR THIS USE CASE:
+What leaks: ${exposure.visible}
+Competitive risk: ${exposure.competitive_risk}
 
-WRITING RULES:
-- NEVER name the product or company in the first message — it enters in email 2 only
-- Open with THEM: a specific observation about what they're building or announced
-- Do not open with "I" or "We"
-- Under 75 words for email body. Under 70 words for DM. Under 300 characters for connection note.
-- One CTA only — an interest check ("Worth a look?" / "Curious if this is on your radar?"), never a meeting ask
-- Write like someone who has worked on this problem before, not a vendor pitching
-- No em dashes. No hedging language ("I believe", "I think", "I'd love to")
-- Subject lines: 2-4 words, lowercase, no punctuation — should read like an internal message
-- Connect related ideas into full sentences — never stack short punchy sentences ("Private. Compliant. Fast." is not acceptable prose)
+---
 
-DO NOT WRITE:
-- Generic openers: "Hope this finds you well", "I came across your company", "Quick question for you"
-- Summarize their company back to them (they know what they do)
-- Describe how the compliance product works
-- Use any of these phrases: "compliance layer", "confidentiality layer", "privacy layer", "institutional-grade", "pools", "mandate", "we can help you", "I wanted to reach out"
-- Antiframing: never define by contrast ("not X, it's Y" / "X, not Y" patterns)
-- Ask for 30 minutes, a call, or a demo
+STRUCTURE FOR EMAIL (follow this order exactly):
 
-EXAMPLES OF THE TONE AND STRUCTURE WE WANT:
+1. Greeting: "Hey ${contactFirstName ?? '[First Name]'}," — always start here if a first name is available, skip if not
+2. Warm hook: One sentence referencing something specific they have done recently — a partnership, a product launch, a hire, a public statement. NEVER quote their funding amount, acquisition price, or valuation back at them. They know those numbers. Reference what they are actively building or shipping.
+3. Bridge: Use this framing — "You probably know, but [specific exposure implication]..." — acknowledges they are already in this world, not lecturing them
+4. Tie to their situation: One sentence connecting the exposure to their specific product or scale
+5. Close: "At Boundless, we are working on [one-line description tied to their use case]. Early partners on XRPL and Stellar have found [relevant benefit]. Curious if [problem] is on your radar?"
 
---- Example: LinkedIn DM (yield company) ---
-Saw you're building institutional DeFi yield products — that's a real infrastructure bet, not a marketing play.
+STRUCTURE FOR LINKEDIN DM (shorter version):
+Same greeting, same hook, shorter bridge, CTA — no need to name Boundless, keep it to an interest check
 
-One thing that tends to catch teams off guard at that scale: protocol allocations and position sizes are visible onchain in real-time. Competitors can see exactly where capital is deployed before you rotate.
+STRUCTURE FOR CONNECTION NOTE:
+One specific observation about what they are building. No pitch. Makes sense as a reason to connect.
 
-Working on something a few similar platforms have found useful. Interested to hear more?
+---
 
---- Example: Email (payments company) ---
-Subject: stablecoin payment exposure
+STRICT RULES:
+- EM DASHES ARE BANNED. Every single one. Replace with a comma, period, or rewrite the sentence. If an em dash appears anywhere in your output, the message fails. Use a comma or period instead.
+- Do not open with "I" or "We" — open with them
+- No hedging: "I believe", "I think", "I would love to", "I wanted to reach out"
+- No generic openers: "Hope this finds you well", "I came across your company", "Quick question"
+- No stacked punchy sentences ("Private. Compliant. Fast.") — connect ideas into real sentences
+- No filler phrases: "compliance layer", "confidentiality layer", "privacy layer", "institutional-grade", "pools", "mandate"
+- Do not summarize their company back to them
+- One CTA only — an interest check, never a meeting request
 
-Noticed the stablecoin settlement launch — that's a meaningful infrastructure move.
+EXAMPLES OF THE RIGHT TONE:
 
-Once you're live on a public chain at volume, payment amounts and recipient wallet addresses are visible to anyone watching. For a company your size, that's supplier relationships and deal pricing in plain sight.
+--- Email example ---
+Hey Sarah,
 
-Working on something a few fintechs in this space have found useful. Worth a quick look?
+The Coinbase partnership announcement was a meaningful move, especially for cross-border use cases.
 
---- Example: Connection note (treasury) ---
-Saw ${lead.company_name} is moving treasury onchain — building something that addresses the financial visibility problem that creates for companies at your scale. Would be good to connect.
+You probably know, but stablecoin payment flows on public chains expose transaction amounts and recipient addresses to anyone watching. At the scale you are heading toward, that means counterparty relationships and deal sizes become readable to competitors and analysts.
 
-NOW WRITE THREE FORMATS for ${lead.company_name}. The hook must reference something specific from the signal above — not a generic observation about the industry.
+At Boundless, we are working on making transaction confidentiality an easy layer for platforms in this space. Early partners on XRPL and Stellar have found real value. Curious if this is on your radar?
+
+--- LinkedIn DM example ---
+Hey Sarah,
+
+The Coinbase partnership was a strong signal about where you are taking the product.
+
+One thing that catches teams off guard at that scale: payment amounts and recipient addresses are visible onchain to anyone watching. That starts to matter when deal sizes are real.
+
+Happy to share what a few other platforms have done about this. Interested?
+
+---
+
+Now write three formats for ${lead.company_name}. The hook MUST reference something specific from the signal field above.
 
 Return ONLY valid JSON with no markdown fences:
 {
-  "linkedin_connection": "connection note under 300 characters — one specific observation about what they're building, no pitch, no ask beyond connecting",
-  "linkedin_dm": "DM under 70 words — hook on the specific signal, one concrete exposure implication, soft CTA. Three short paragraphs.",
-  "email_subject": "2-4 word lowercase subject",
-  "email_body": "email body under 75 words — hook paragraph, exposure bridge paragraph, CTA paragraph. No more than three paragraphs."
+  "linkedin_connection": "connection note under 300 characters",
+  "linkedin_dm": "DM under 75 words, three short paragraphs, greeting with first name",
+  "email_subject": "2-4 word lowercase subject, no punctuation",
+  "email_body": "email under 100 words, follows the five-part structure above"
 }`
 
   const response = await anthropic.messages.create({
@@ -132,9 +151,12 @@ Return ONLY valid JSON with no markdown fences:
     throw new Error('Could not parse outreach response')
   }
 
+  // Post-process: strip any em dashes that slipped through
+  const stripEmDash = (s: string) => s.replace(/\s*—\s*/g, ', ')
+
   return {
-    linkedin_connection: result.linkedin_connection || '',
-    linkedin_dm: result.linkedin_dm || '',
-    email: `Subject: ${result.email_subject || ''}\n\n${result.email_body || ''}`,
+    linkedin_connection: stripEmDash(result.linkedin_connection || ''),
+    linkedin_dm: stripEmDash(result.linkedin_dm || ''),
+    email: stripEmDash(`Subject: ${result.email_subject || ''}\n\n${result.email_body || ''}`),
   }
 }
