@@ -1,6 +1,8 @@
 import { generateLeads } from '@/lib/generate-leads'
 import { getPendingLeadCount } from '@/lib/db'
 
+export const maxDuration = 300
+
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

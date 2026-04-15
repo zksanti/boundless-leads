@@ -3,7 +3,7 @@ import { getLeadById, getReportForLead, insertOutreach } from '@/lib/db'
 import { generateReport } from '@/lib/generate-report'
 import { neon } from '@neondatabase/serverless'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const sql = neon(process.env.POSTGRES_URL!)
 
