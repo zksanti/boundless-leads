@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { getPatterns, getExistingCompanyNames, insertLead } from './db'
+import { getPatterns, getExistingCompanyNames, insertLead, insertContact } from './db'
 import type { Pattern } from './types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
@@ -86,7 +86,15 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
     "tier": 1 | 2,
     "company_size": "e.g. '50-200 employees' or '~500 employees' — estimate if unsure, leave blank if truly unknown",
     "funding": "e.g. 'Series B $45M' or 'Raised $12M seed' or 'Public: NYSE' — leave blank if truly unknown",
-    "why_boundless_fits": "2-3 sentences: name the specific Boundless service (Boundless Payments/Yield/Treasury/Tokenization), describe exactly where it plugs into their stack or product flow, and what competitive exposure problem it solves for them specifically"
+    "why_boundless_fits": "2-3 sentences: name the specific Boundless service (Boundless Payments/Yield/Treasury/Tokenization), describe exactly where it plugs into their stack or product flow, and what competitive exposure problem it solves for them specifically",
+    "contacts": [
+      {
+        "name": "string",
+        "title": "CEO / Co-founder / CTO / Head of Compliance — pick the most relevant decision-maker",
+        "linkedin_url": "https://linkedin.com/in/... (best guess from known info, leave empty string if unknown)",
+        "twitter_url": "https://x.com/... (best guess, leave empty string if unknown)"
+      }
+    ]
   }
 ]`
 
@@ -109,6 +117,12 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
     company_size: string
     funding: string
     why_boundless_fits: string
+    contacts?: Array<{
+      name: string
+      title: string
+      linkedin_url: string
+      twitter_url: string
+    }>
   }>
 
   try {
@@ -123,7 +137,7 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
   for (const lead of leads) {
     if (!lead.company_name || !lead.use_case) continue
     if (excluded.includes(lead.company_name.toLowerCase())) continue
-    await insertLead({
+    const saved = await insertLead({
       company_name: lead.company_name,
       website_url: lead.website_url || '',
       description: lead.description || '',
@@ -134,6 +148,22 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
       funding: lead.funding || '',
       why_boundless_fits: lead.why_boundless_fits || '',
     })
+
+    if (lead.contacts?.length) {
+      for (let i = 0; i < lead.contacts.length; i++) {
+        const c = lead.contacts[i]
+        if (!c.name) continue
+        await insertContact({
+          lead_id: saved.id,
+          name: c.name,
+          title: c.title || '',
+          linkedin_url: c.linkedin_url || '',
+          twitter_url: c.twitter_url || '',
+          is_primary: i === 0,
+        })
+      }
+    }
+
     inserted++
   }
 

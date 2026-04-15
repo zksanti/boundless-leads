@@ -4,9 +4,10 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const tabs = [
-  { href: '/', label: 'Swipe', icon: '♠' },
-  { href: '/queue', label: 'Queue', icon: '♥' },
-  { href: '/patterns', label: 'Patterns', icon: '◈' },
+  { href: '/', label: 'Swipe' },
+  { href: '/queue', label: 'Queue' },
+  { href: '/crm', label: 'Pipeline' },
+  { href: '/patterns', label: 'Patterns' },
 ]
 
 export default function Nav() {
@@ -14,7 +15,7 @@ export default function Nav() {
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-gray-100">
-      <div className="max-w-sm mx-auto px-4 h-14 flex items-center justify-between">
+      <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-900 tracking-tight">
           Boundless Leads
         </span>

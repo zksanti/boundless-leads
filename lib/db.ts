@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless'
-import type { Lead, Contact, Pattern, Outreach, LeadWithContacts } from './types'
+import type { Lead, Contact, Pattern, Outreach, LeadWithContacts, CRMStage } from './types'
 
 const sql = neon(process.env.POSTGRES_URL!)
 
@@ -27,6 +27,7 @@ export async function setupDatabase() {
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS website_url TEXT DEFAULT ''`
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS company_size TEXT DEFAULT ''`
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS funding TEXT DEFAULT ''`
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS crm_stage TEXT NOT NULL DEFAULT 'needs_outreach'`
 
   await sql`
     CREATE TABLE IF NOT EXISTS contacts (
@@ -35,9 +36,11 @@ export async function setupDatabase() {
       name TEXT NOT NULL,
       title TEXT DEFAULT '',
       linkedin_url TEXT DEFAULT '',
+      twitter_url TEXT DEFAULT '',
       is_primary BOOLEAN DEFAULT FALSE
     )
   `
+  await sql`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS twitter_url TEXT DEFAULT ''`
 
   await sql`
     CREATE TABLE IF NOT EXISTS swipe_patterns (
@@ -179,20 +182,35 @@ export async function insertContact(contact: {
   name: string
   title: string
   linkedin_url: string
+  twitter_url?: string
   is_primary: boolean
 }): Promise<Contact> {
   const rows = await sql`
-    INSERT INTO contacts (lead_id, name, title, linkedin_url, is_primary)
-    VALUES (${contact.lead_id}, ${contact.name}, ${contact.title}, ${contact.linkedin_url}, ${contact.is_primary})
+    INSERT INTO contacts (lead_id, name, title, linkedin_url, twitter_url, is_primary)
+    VALUES (${contact.lead_id}, ${contact.name}, ${contact.title}, ${contact.linkedin_url}, ${contact.twitter_url ?? ''}, ${contact.is_primary})
     RETURNING *
   `
   return rows[0] as Contact
 }
 
+export async function updateCRMStage(leadId: string, stage: CRMStage): Promise<void> {
+  await sql`UPDATE leads SET crm_stage = ${stage} WHERE id = ${leadId}`
+}
+
+export async function getReportForLead(leadId: string): Promise<Outreach | null> {
+  const rows = await sql`
+    SELECT * FROM outreach
+    WHERE lead_id = ${leadId} AND type = 'research_report'
+    ORDER BY generated_at DESC
+    LIMIT 1
+  `
+  return (rows[0] as Outreach) || null
+}
+
 export async function insertOutreach(outreach: {
   lead_id: string
   contact_id: string | null
-  type: string
+  type: 'linkedin_connection' | 'linkedin_dm' | 'email' | 'research_report'
   content: string
 }): Promise<Outreach> {
   const rows = await sql`
