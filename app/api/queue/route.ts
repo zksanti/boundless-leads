@@ -1,7 +1,8 @@
-import { getAcceptedLeads } from '@/lib/db'
+import { setupDatabase, getAcceptedLeads } from '@/lib/db'
 
 export async function GET() {
   try {
+    await setupDatabase()
     const leads = await getAcceptedLeads()
     return Response.json(leads)
   } catch (error) {

@@ -1,7 +1,8 @@
-import { getPatterns, getTotalSwipeCount, getPendingInsight, getActiveRefinements } from '@/lib/db'
+import { setupDatabase, getPatterns, getTotalSwipeCount, getPendingInsight, getActiveRefinements } from '@/lib/db'
 
 export async function GET() {
   try {
+    await setupDatabase()
     const [patterns, swipeCount, pendingInsight, refinements] = await Promise.all([
       getPatterns(),
       getTotalSwipeCount(),
