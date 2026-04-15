@@ -31,9 +31,18 @@ export default function HomePage() {
     generatingRef.current = true
     setIsGenerating(true)
     try {
-      await fetch('/api/leads/generate', { method: 'POST' })
+      const genRes = await fetch('/api/leads/generate', { method: 'POST' })
+      if (!genRes.ok) {
+        const err = await genRes.text()
+        console.error('Generate failed:', genRes.status, err)
+      } else {
+        const data = await genRes.json()
+        console.log('Generated:', data)
+      }
       const res = await fetch('/api/leads')
       if (res.ok) setLeads(await res.json())
+    } catch (err) {
+      console.error('loadMore error:', err)
     } finally {
       setIsGenerating(false)
       generatingRef.current = false

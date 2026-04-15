@@ -1,6 +1,8 @@
 import { deletePendingLeads } from '@/lib/db'
 import { generateLeads } from '@/lib/generate-leads'
 
+export const maxDuration = 60
+
 export async function POST() {
   try {
     const deleted = await deletePendingLeads()

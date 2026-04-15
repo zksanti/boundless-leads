@@ -1,5 +1,7 @@
 import { generateLeads } from '@/lib/generate-leads'
 
+export const maxDuration = 60
+
 export async function POST() {
   try {
     const count = await generateLeads(20)
