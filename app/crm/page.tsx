@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import OutreachModal from '@/components/OutreachModal'
-import type { LeadWithContacts, CRMStage } from '@/lib/types'
+import type { LeadWithContacts, CRMStage, UseCase } from '@/lib/types'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -48,10 +48,12 @@ function TicketCard({
   lead,
   onClick,
   onDragStart,
+  onTogglePriority,
 }: {
   lead: LeadWithContacts
   onClick: () => void
   onDragStart: (e: React.DragEvent) => void
+  onTogglePriority: (e: React.MouseEvent) => void
 }) {
   const hasOutreach = lead.outreach.some((o) => o.type !== 'research_report')
   const hasReport   = lead.outreach.some((o) => o.type === 'research_report')
@@ -61,14 +63,25 @@ function TicketCard({
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
-      className="bg-white border border-gray-200 rounded-xl p-3.5 cursor-pointer hover:border-gray-300 hover:shadow-sm transition-all active:opacity-70 select-none"
+      className={`bg-white rounded-xl p-3.5 cursor-pointer hover:shadow-sm transition-all active:opacity-70 select-none border ${
+        lead.is_priority ? 'border-orange-300 bg-orange-50/30' : 'border-gray-200 hover:border-gray-300'
+      }`}
     >
-      {/* Category + tier */}
+      {/* Category + priority + tier */}
       <div className="flex items-center justify-between mb-2.5">
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${USE_CASE_COLOR[lead.use_case] ?? 'bg-gray-100 text-gray-600'}`}>
           {lead.use_case}
         </span>
-        <span className="text-xs text-gray-300 font-medium">T{lead.tier}</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onTogglePriority}
+            title={lead.is_priority ? 'Remove priority' : 'Mark as priority'}
+            className={`text-sm leading-none transition-colors ${lead.is_priority ? 'text-orange-500' : 'text-gray-200 hover:text-orange-400'}`}
+          >
+            ⚑
+          </button>
+          <span className="text-xs text-gray-300 font-medium">T{lead.tier}</span>
+        </div>
       </div>
 
       {/* Company name */}
@@ -87,12 +100,8 @@ function TicketCard({
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          {hasOutreach && (
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-400" title="Outreach drafted" />
-          )}
-          {hasReport && (
-            <span className="w-1.5 h-1.5 rounded-full bg-violet-400" title="Report generated" />
-          )}
+          {hasOutreach && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" title="Outreach drafted" />}
+          {hasReport && <span className="w-1.5 h-1.5 rounded-full bg-violet-400" title="Report generated" />}
         </div>
       </div>
     </div>
@@ -106,18 +115,20 @@ function BoardColumn({
   leads,
   onCardClick,
   onDrop,
+  onTogglePriority,
 }: {
   stage: CRMStage
   leads: LeadWithContacts[]
   onCardClick: (lead: LeadWithContacts) => void
   onDrop: (leadId: string, stage: CRMStage) => void
+  onTogglePriority: (leadId: string) => void
 }) {
   const [isDragOver, setIsDragOver] = useState(false)
   const cfg = STAGE_CONFIG[stage]
 
   return (
     <div
-      className={`flex-shrink-0 w-56 flex flex-col rounded-xl border-2 transition-colors ${
+      className={`flex flex-col rounded-xl border-2 transition-colors h-full ${
         isDragOver ? 'border-gray-400 bg-gray-50' : 'border-transparent'
       }`}
       onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
@@ -130,7 +141,7 @@ function BoardColumn({
       }}
     >
       {/* Column header */}
-      <div className="px-1 pb-2 flex items-center justify-between">
+      <div className="px-1 pb-2 flex-shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className={`w-2.5 h-2.5 rounded-full border-2 ${cfg.accent}`} />
           <span className="text-xs font-semibold text-gray-600">{cfg.label}</span>
@@ -140,8 +151,8 @@ function BoardColumn({
         )}
       </div>
 
-      {/* Cards */}
-      <div className="flex flex-col gap-2 flex-1 overflow-y-auto min-h-[60px]">
+      {/* Cards — scrolls vertically */}
+      <div className="flex flex-col gap-2 overflow-y-auto flex-1 pr-0.5">
         {leads.map((lead) => (
           <TicketCard
             key={lead.id}
@@ -151,8 +162,16 @@ function BoardColumn({
               e.dataTransfer.setData('leadId', lead.id)
               e.dataTransfer.effectAllowed = 'move'
             }}
+            onTogglePriority={(e) => {
+              e.stopPropagation()
+              onTogglePriority(lead.id)
+            }}
           />
         ))}
+        {/* Drop zone when empty */}
+        {leads.length === 0 && (
+          <div className="flex-1 min-h-[80px] rounded-lg border-2 border-dashed border-gray-100" />
+        )}
       </div>
     </div>
   )
@@ -437,6 +456,7 @@ export default function CRMPage() {
   const [selectedLead, setSelectedLead] = useState<LeadWithContacts | null>(null)
   const [outreachLead, setOutreachLead] = useState<LeadWithContacts | null>(null)
   const [showClosed, setShowClosed] = useState(false)
+  const [serviceFilter, setServiceFilter] = useState<UseCase | 'all'>('all')
 
   useEffect(() => {
     fetch('/api/queue')
@@ -444,6 +464,15 @@ export default function CRMPage() {
       .then((data) => { setLeads(Array.isArray(data) ? data : []); setIsLoading(false) })
       .catch(() => setIsLoading(false))
   }, [])
+
+  const handleTogglePriority = async (leadId: string) => {
+    const res = await fetch(`/api/leads/${leadId}/priority`, { method: 'PATCH' })
+    if (res.ok) {
+      const { is_priority } = await res.json()
+      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, is_priority } : l))
+      if (selectedLead?.id === leadId) setSelectedLead((prev) => prev ? { ...prev, is_priority } : null)
+    }
+  }
 
   const handleDrop = async (leadId: string, newStage: CRMStage) => {
     const lead = leads.find((l) => l.id === leadId)
@@ -476,11 +505,16 @@ export default function CRMPage() {
   }
 
   const visibleStages = showClosed ? ALL_STAGES : BOARD_STAGES
+  const filteredLeads = serviceFilter === 'all' ? leads : leads.filter((l) => l.use_case === serviceFilter)
   const leadsByStage: Record<CRMStage, LeadWithContacts[]> = {} as Record<CRMStage, LeadWithContacts[]>
   for (const s of ALL_STAGES) leadsByStage[s] = []
-  for (const l of leads) leadsByStage[l.crm_stage]?.push(l)
+  for (const l of filteredLeads) {
+    // Priority leads float to top of their column
+    if (l.is_priority) leadsByStage[l.crm_stage]?.unshift(l)
+    else leadsByStage[l.crm_stage]?.push(l)
+  }
 
-  const closedCount = leads.filter((l) => ['nurture', 'closed_won', 'closed_lost'].includes(l.crm_stage)).length
+  const closedCount = filteredLeads.filter((l) => ['nurture', 'closed_won', 'closed_lost'].includes(l.crm_stage)).length
 
   if (isLoading) {
     return (
@@ -499,36 +533,59 @@ export default function CRMPage() {
     )
   }
 
+  const BOARD_H = 'calc(100vh - 56px)'
+  const COLUMN_H = 'calc(100vh - 130px)'
+
   return (
     <>
-      {/* Full-height board layout */}
-      <div className="flex flex-col" style={{ height: 'calc(100vh - 56px)' }}>
+      <div className="flex flex-col bg-gray-50" style={{ height: BOARD_H }}>
+
         {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white">
-          <div>
+        <div className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white gap-4">
+          <div className="flex-shrink-0">
             <h1 className="text-sm font-semibold text-gray-900">Pipeline</h1>
             <p className="text-xs text-gray-400">{leads.length} companies</p>
           </div>
+
+          {/* Service filter */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
+            {(['all', 'payments', 'yield', 'treasury', 'tokenization'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setServiceFilter(f)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors capitalize ${
+                  serviceFilter === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+
           {closedCount > 0 && (
             <button
               onClick={() => setShowClosed((v) => !v)}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-600 transition-colors"
             >
-              {showClosed ? 'Hide closed' : `Show closed (${closedCount})`}
+              {showClosed ? 'Hide closed' : `Closed (${closedCount})`}
             </button>
           )}
         </div>
 
-        {/* Board */}
-        <div className="flex-1 overflow-x-auto overflow-y-hidden">
-          <div className="flex gap-3 p-4 h-full" style={{ width: 'max-content', minWidth: '100%' }}>
+        {/* Board — horizontal scroll */}
+        <div
+          className="flex-1 overflow-x-auto"
+          style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+        >
+          <div className="flex gap-3 px-4 pt-4 pb-4" style={{ minWidth: 'max-content' }}>
             {visibleStages.map((stage) => (
-              <div key={stage} className="flex flex-col" style={{ width: 224, height: '100%' }}>
+              <div key={stage} style={{ width: 220, height: COLUMN_H, display: 'flex', flexDirection: 'column' }}>
                 <BoardColumn
                   stage={stage}
                   leads={leadsByStage[stage]}
                   onCardClick={(lead) => setSelectedLead(lead)}
                   onDrop={handleDrop}
+                  onTogglePriority={handleTogglePriority}
                 />
               </div>
             ))}

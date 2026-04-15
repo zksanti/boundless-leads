@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless'
-import type { Lead, Contact, Pattern, Outreach, LeadWithContacts, CRMStage } from './types'
+import type { Lead, Contact, Pattern, Outreach, LeadWithContacts, CRMStage, PatternInsight, SearchRefinement } from './types'
 
 const sql = neon(process.env.POSTGRES_URL!)
 
@@ -28,6 +28,7 @@ export async function setupDatabase() {
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS company_size TEXT DEFAULT ''`
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS funding TEXT DEFAULT ''`
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS crm_stage TEXT NOT NULL DEFAULT 'needs_outreach'`
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS is_priority BOOLEAN NOT NULL DEFAULT FALSE`
 
   await sql`
     CREATE TABLE IF NOT EXISTS contacts (
@@ -64,6 +65,29 @@ export async function setupDatabase() {
     )
   `
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS pattern_insights (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      swipe_milestone INTEGER NOT NULL,
+      insight TEXT NOT NULL,
+      refinement TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      user_feedback TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      responded_at TIMESTAMPTZ
+    )
+  `
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS search_refinements (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      content TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'ai',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      active BOOLEAN NOT NULL DEFAULT TRUE
+    )
+  `
+
   const useCases = ['payments', 'yield', 'treasury', 'tokenization']
   for (const uc of useCases) {
     for (const tier of [1, 2]) {
@@ -81,7 +105,7 @@ export async function getPendingLeads(limit = 10): Promise<Lead[]> {
     SELECT * FROM leads
     WHERE status = 'pending'
        OR (status = 'snoozed' AND snooze_until < NOW())
-    ORDER BY created_at DESC
+    ORDER BY is_priority DESC, created_at DESC
     LIMIT ${limit}
   `
   return rows as Lead[]
@@ -98,7 +122,7 @@ export async function getPendingLeadCount(): Promise<number> {
 export async function getAcceptedLeads(): Promise<LeadWithContacts[]> {
   const leads = await sql`
     SELECT * FROM leads WHERE status = 'accepted'
-    ORDER BY swiped_at DESC
+    ORDER BY is_priority DESC, swiped_at DESC
   `
 
   return Promise.all(
@@ -158,6 +182,82 @@ export async function getPatterns(): Promise<Pattern[]> {
   return rows as Pattern[]
 }
 
+export async function getTotalSwipeCount(): Promise<number> {
+  const rows = await sql`
+    SELECT COUNT(*)::int AS count FROM leads
+    WHERE status IN ('accepted', 'rejected')
+  `
+  return rows[0].count
+}
+
+export async function getSwipedLeadsForAnalysis(): Promise<{ accepted: Lead[]; rejected: Lead[] }> {
+  const accepted = await sql`
+    SELECT id, company_name, use_case, tier, description, signal, why_boundless_fits, funding, company_size
+    FROM leads WHERE status = 'accepted'
+    ORDER BY swiped_at DESC LIMIT 60
+  `
+  const rejected = await sql`
+    SELECT id, company_name, use_case, tier, description, signal, why_boundless_fits, funding, company_size
+    FROM leads WHERE status = 'rejected'
+    ORDER BY swiped_at DESC LIMIT 60
+  `
+  return { accepted: accepted as Lead[], rejected: rejected as Lead[] }
+}
+
+export async function getPendingInsight(): Promise<PatternInsight | null> {
+  const rows = await sql`
+    SELECT * FROM pattern_insights WHERE status = 'pending'
+    ORDER BY created_at DESC LIMIT 1
+  `
+  return (rows[0] as PatternInsight) || null
+}
+
+export async function getInsightForMilestone(milestone: number): Promise<PatternInsight | null> {
+  const rows = await sql`
+    SELECT * FROM pattern_insights WHERE swipe_milestone = ${milestone}
+    ORDER BY created_at DESC LIMIT 1
+  `
+  return (rows[0] as PatternInsight) || null
+}
+
+export async function saveInsight(milestone: number, insight: string, refinement: string): Promise<PatternInsight> {
+  const rows = await sql`
+    INSERT INTO pattern_insights (swipe_milestone, insight, refinement)
+    VALUES (${milestone}, ${insight}, ${refinement})
+    RETURNING *
+  `
+  return rows[0] as PatternInsight
+}
+
+export async function respondToInsight(id: string, status: 'accepted' | 'rejected', feedback: string): Promise<void> {
+  await sql`
+    UPDATE pattern_insights
+    SET status = ${status}, user_feedback = ${feedback}, responded_at = NOW()
+    WHERE id = ${id}
+  `
+}
+
+export async function getActiveRefinements(): Promise<SearchRefinement[]> {
+  const rows = await sql`
+    SELECT * FROM search_refinements WHERE active = TRUE
+    ORDER BY created_at DESC
+  `
+  return rows as SearchRefinement[]
+}
+
+export async function saveRefinement(content: string, source: 'ai' | 'manual'): Promise<SearchRefinement> {
+  const rows = await sql`
+    INSERT INTO search_refinements (content, source)
+    VALUES (${content}, ${source})
+    RETURNING *
+  `
+  return rows[0] as SearchRefinement
+}
+
+export async function deactivateRefinement(id: string): Promise<void> {
+  await sql`UPDATE search_refinements SET active = FALSE WHERE id = ${id}`
+}
+
 export async function insertLead(lead: {
   company_name: string
   website_url: string
@@ -197,6 +297,14 @@ export async function updateCRMStage(leadId: string, stage: CRMStage): Promise<v
   await sql`UPDATE leads SET crm_stage = ${stage} WHERE id = ${leadId}`
 }
 
+export async function togglePriority(leadId: string): Promise<boolean> {
+  const rows = await sql`
+    UPDATE leads SET is_priority = NOT is_priority WHERE id = ${leadId}
+    RETURNING is_priority
+  `
+  return rows[0].is_priority as boolean
+}
+
 export async function getReportForLead(leadId: string): Promise<Outreach | null> {
   const rows = await sql`
     SELECT * FROM outreach
@@ -222,8 +330,6 @@ export async function insertOutreach(outreach: {
 }
 
 export async function getExistingCompanyNames(): Promise<string[]> {
-  // Only exclude companies that are accepted or still pending — not rejected.
-  // Rejected leads can be regenerated fresh on the next run.
   const rows = await sql`
     SELECT LOWER(company_name) AS name FROM leads
     WHERE status IN ('accepted', 'pending', 'snoozed')

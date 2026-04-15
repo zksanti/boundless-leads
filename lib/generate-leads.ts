@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { setupDatabase, getPatterns, getExistingCompanyNames, insertLead, insertContact } from './db'
+import { setupDatabase, getPatterns, getExistingCompanyNames, getActiveRefinements, insertLead, insertContact } from './db'
 import type { Pattern } from './types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
@@ -26,9 +26,10 @@ export async function generateLeads(count = 20): Promise<number> {
   // Always ensure schema is current — idempotent, safe to call every time
   await setupDatabase()
 
-  const [patterns, existingNames] = await Promise.all([
+  const [patterns, existingNames, refinements] = await Promise.all([
     getPatterns(),
     getExistingCompanyNames(),
+    getActiveRefinements(),
   ])
 
   const patternContext = buildPatternContext(patterns)
@@ -77,7 +78,7 @@ DISQUALIFY:
 
 DO NOT INCLUDE (already in pipeline):
 ${excluded.join(', ')}
-${patternContext}
+${patternContext}${refinements.length > 0 ? `\nUSER SEARCH PREFERENCES (apply these):\n${refinements.map((r) => `  - ${r.content}`).join('\n')}\n` : ''}
 Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
 [
   {

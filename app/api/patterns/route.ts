@@ -1,9 +1,14 @@
-import { getPatterns } from '@/lib/db'
+import { getPatterns, getTotalSwipeCount, getPendingInsight, getActiveRefinements } from '@/lib/db'
 
 export async function GET() {
   try {
-    const patterns = await getPatterns()
-    return Response.json(patterns)
+    const [patterns, swipeCount, pendingInsight, refinements] = await Promise.all([
+      getPatterns(),
+      getTotalSwipeCount(),
+      getPendingInsight(),
+      getActiveRefinements(),
+    ])
+    return Response.json({ patterns, swipeCount, pendingInsight, refinements })
   } catch (error) {
     console.error('GET /api/patterns error:', error)
     return Response.json({ error: 'Failed to fetch patterns' }, { status: 500 })

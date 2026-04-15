@@ -28,9 +28,29 @@ export interface Lead {
   why_boundless_fits: string
   status: LeadStatus
   crm_stage: CRMStage
+  is_priority: boolean
   created_at: string
   swiped_at: string | null
   snooze_until: string | null
+}
+
+export interface PatternInsight {
+  id: string
+  swipe_milestone: number
+  insight: string
+  refinement: string
+  status: 'pending' | 'accepted' | 'rejected'
+  user_feedback: string
+  created_at: string
+  responded_at: string | null
+}
+
+export interface SearchRefinement {
+  id: string
+  content: string
+  source: 'ai' | 'manual'
+  created_at: string
+  active: boolean
 }
 
 export interface Contact {
