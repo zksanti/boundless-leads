@@ -204,7 +204,12 @@ export async function insertOutreach(outreach: {
 }
 
 export async function getExistingCompanyNames(): Promise<string[]> {
-  const rows = await sql`SELECT LOWER(company_name) AS name FROM leads`
+  // Only exclude companies that are accepted or still pending — not rejected.
+  // Rejected leads can be regenerated fresh on the next run.
+  const rows = await sql`
+    SELECT LOWER(company_name) AS name FROM leads
+    WHERE status IN ('accepted', 'pending', 'snoozed')
+  `
   return rows.map((r) => r.name as string)
 }
 

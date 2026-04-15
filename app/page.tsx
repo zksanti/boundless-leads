@@ -26,8 +26,8 @@ export default function HomePage() {
     }
   }, [])
 
-  const loadMore = useCallback(async () => {
-    if (generatingRef.current) return
+  const loadMore = useCallback(async (force = false) => {
+    if (!force && generatingRef.current) return
     generatingRef.current = true
     setIsGenerating(true)
     try {
@@ -124,7 +124,7 @@ export default function HomePage() {
               {isResetting ? 'Resetting...' : 'Reset deck'}
             </button>
             <button
-              onClick={loadMore}
+              onClick={() => loadMore(true)}
               disabled={isGenerating || isResetting}
               className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-40 transition-colors"
             >
@@ -136,7 +136,7 @@ export default function HomePage() {
         <SwipeDeck
           leads={leads}
           onSwipe={handleSwipe}
-          onEmpty={loadMore}
+          onEmpty={() => loadMore(true)}
           isLoading={isLoading}
           isGenerating={isGenerating}
         />
