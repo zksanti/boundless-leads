@@ -100,12 +100,17 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 4000,
+    max_tokens: 10000,
     messages: [{ role: 'user', content: prompt }],
   })
 
   const content = response.content[0]
   if (content.type !== 'text') return 0
+
+  // Log truncation — if this appears in Vercel logs, raise max_tokens further
+  if (response.stop_reason === 'max_tokens') {
+    console.warn('generate-leads: response was truncated (hit max_tokens). Consider reducing count or fields.')
+  }
 
   let leads: Array<{
     company_name: string
@@ -127,9 +132,13 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
 
   try {
     const text = content.text.trim()
-    const jsonStr = text.startsWith('[') ? text : (text.match(/\[[\s\S]*\]/) ?? ['[]'])[0]
+    // Extract JSON array — handles markdown code fences too
+    const jsonStr = text.startsWith('[')
+      ? text
+      : (text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/) ?? text.match(/(\[[\s\S]*\])/) ?? ['', '[]'])[1]
     leads = JSON.parse(jsonStr)
-  } catch {
+  } catch (e) {
+    console.error('generate-leads: JSON parse failed. stop_reason:', response.stop_reason, 'text length:', content.text.length, e)
     return 0
   }
 
