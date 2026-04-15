@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { getPatterns, getExistingCompanyNames, insertLead, insertContact } from './db'
+import { setupDatabase, getPatterns, getExistingCompanyNames, insertLead, insertContact } from './db'
 import type { Pattern } from './types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
@@ -23,6 +23,9 @@ function buildPatternContext(patterns: Pattern[]): string {
 }
 
 export async function generateLeads(count = 20): Promise<number> {
+  // Always ensure schema is current — idempotent, safe to call every time
+  await setupDatabase()
+
   const [patterns, existingNames] = await Promise.all([
     getPatterns(),
     getExistingCompanyNames(),
@@ -162,14 +165,18 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
       for (let i = 0; i < lead.contacts.length; i++) {
         const c = lead.contacts[i]
         if (!c.name) continue
-        await insertContact({
-          lead_id: saved.id,
-          name: c.name,
-          title: c.title || '',
-          linkedin_url: c.linkedin_url || '',
-          twitter_url: c.twitter_url || '',
-          is_primary: i === 0,
-        })
+        try {
+          await insertContact({
+            lead_id: saved.id,
+            name: c.name,
+            title: c.title || '',
+            linkedin_url: c.linkedin_url || '',
+            twitter_url: c.twitter_url || '',
+            is_primary: i === 0,
+          })
+        } catch (e) {
+          console.warn('insertContact failed (non-fatal):', e)
+        }
       }
     }
 
