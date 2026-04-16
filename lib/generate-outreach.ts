@@ -92,8 +92,18 @@ STRUCTURE FOR THE EMAIL:
 STRUCTURE FOR LINKEDIN DM (shorter):
 Greeting, hook, bridge only. Skip the Boundless intro. Close with interest check.
 
-STRUCTURE FOR CONNECTION NOTE:
-One sentence about what they are building that shows genuine familiarity. No pitch.
+STRUCTURE FOR CONNECTION NOTE (follow this template closely):
+"[Warm opener — one genuine sentence about what they're building. Not "impressive work" or "crushing it". Something specific.]  My team is building [use-case one-liner]. Would be good to connect."
+
+Use-case one-liners to use verbatim:
+- payments: "a solution for confidential stablecoin payments with compliance controls built-in"
+- yield: "confidential onchain yield infrastructure with compliance built-in"
+- treasury: "a solution for confidential onchain treasury management with compliance controls built-in"
+- tokenization: "confidential tokenization infrastructure with compliance controls built-in"
+
+Example output for payments: "Big fan of what you guys are building at [Company]. My team is building a solution for confidential stablecoin payments with compliance controls built-in. Would be good to connect."
+
+Under 300 characters total. The one-liner establishes context — do not expand it into a pitch.
 
 ---
 
