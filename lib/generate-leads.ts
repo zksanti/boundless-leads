@@ -22,6 +22,52 @@ function buildPatternContext(patterns: Pattern[]): string {
   return `\nUSER APPROVAL HISTORY — weight these in your selection:\n${lines.join('\n')}\n`
 }
 
+type LeadRow = {
+  company_name: string
+  website_url: string
+  description: string
+  signal: string
+  use_case: string
+  tier: number
+  company_size: string
+  funding: string
+  why_boundless_fits: string
+  contacts?: Array<{ name: string; title: string; linkedin_url: string; twitter_url: string }>
+}
+
+async function verifyLeads(leads: LeadRow[]): Promise<LeadRow[]> {
+  if (leads.length === 0) return leads
+
+  const names = leads.map((l) => l.company_name)
+
+  const verifyPrompt = `You are a fact-checker reviewing a list of company names. For each company, answer honestly: is this a real company you have actually seen in public sources (news, funding announcements, product launches)? Or does it sound like a plausible name that may have been fabricated?
+
+Companies to check:
+${names.map((n, i) => `${i + 1}. ${n}`).join('\n')}
+
+Return ONLY a JSON array of booleans — true if the company is real and you are confident, false if you are unsure or it may be hallucinated. One boolean per company, in the same order. Example: [true, false, true, true]`
+
+  try {
+    const res = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 200,
+      messages: [{ role: 'user', content: verifyPrompt }],
+    })
+    const firstBlock = res.content[0]
+    if (firstBlock.type !== 'text') return leads
+    const text = firstBlock.text.trim()
+    const jsonStr = text.startsWith('[') ? text : (text.match(/\[[\s\S]*\]/) ?? ['[]'])[0]
+    const verified: boolean[] = JSON.parse(jsonStr)
+    const filtered = leads.filter((_, i) => verified[i] !== false)
+    const removed = leads.length - filtered.length
+    if (removed > 0) console.log(`generate-leads: verification removed ${removed} potentially hallucinated companies`)
+    return filtered
+  } catch (e) {
+    console.warn('generate-leads: verification pass failed, using unfiltered list', e)
+    return leads
+  }
+}
+
 export async function generateLeads(count = 20): Promise<number> {
   // Always ensure schema is current — idempotent, safe to call every time
   await setupDatabase()
@@ -79,24 +125,37 @@ DISQUALIFY:
 DO NOT INCLUDE (already in pipeline):
 ${excluded.join(', ')}
 ${patternContext}${refinements.length > 0 ? `\nUSER SEARCH PREFERENCES (apply these):\n${refinements.map((r) => `  - ${r.content}`).join('\n')}\n` : ''}
-Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
+CRITICAL — READ BEFORE GENERATING:
+
+You are RECALLING real companies from your training data, not inventing companies that fit a template. Every company you list must be one you have seen in public sources (news articles, funding announcements, job postings, company blogs, press releases). If you are not certain a company exists and matches these criteria, do not include it.
+
+HALLUCINATION RULES — violations make the entire output useless:
+- Do NOT invent company names that sound plausible but you have not actually seen in sources
+- Do NOT fabricate funding amounts, employee counts, or signals — leave fields blank if unknown
+- Do NOT guess contact names — only include people you have seen publicly associated with the company (founders named in press, executives in interviews, etc.)
+- Do NOT include a company if your confidence it exists and fits is below 90%
+- It is far better to return 8 real companies than 20 where several are hallucinated
+
+For each company ask yourself: "Have I actually seen this company mentioned in real sources? Can I name the specific thing that happened — a funding announcement, a product launch, a press release?" If the answer is no, skip it.
+
+Return up to ${count} qualified leads (fewer is fine if you cannot reach ${count} with high confidence). Return ONLY a JSON array, no markdown:
 [
   {
-    "company_name": "string",
-    "website_url": "https://... (homepage URL, best guess if unsure)",
+    "company_name": "string — a real company you have seen in public sources",
+    "website_url": "https://... — only include if you are confident of the actual domain. Leave empty string if unsure.",
     "description": "one sentence what they do",
-    "signal": "specific qualifying signal (product launch, job posting, news, funding round, etc.)",
+    "signal": "the specific real event you know about — name the source type (e.g. 'TechCrunch article April 2024', 'job posting on LinkedIn', 'founder tweet'). Do not fabricate signals.",
     "use_case": "payments" | "yield" | "treasury" | "tokenization",
     "tier": 1 | 2,
-    "company_size": "e.g. '50-200 employees' or '~500 employees' — estimate if unsure, leave blank if truly unknown",
-    "funding": "e.g. 'Series B $45M' or 'Raised $12M seed' or 'Public: NYSE' — leave blank if truly unknown",
-    "why_boundless_fits": "2-3 sentences: name the specific Boundless service (Boundless Payments/Yield/Treasury/Tokenization), describe exactly where it plugs into their stack or product flow, and what competitive exposure problem it solves for them specifically",
+    "company_size": "only include if you have actually seen this figure. Leave blank if unknown.",
+    "funding": "only include if you have seen this figure in a real source. Leave blank if unknown.",
+    "why_boundless_fits": "2-3 sentences: name the specific Boundless service, describe where it plugs into their stack, and what exposure problem it solves for them",
     "contacts": [
       {
-        "name": "string",
-        "title": "CEO / Co-founder / CTO / Head of Compliance — pick the most relevant decision-maker",
-        "linkedin_url": "LinkedIn people search URL — ALWAYS use this format: https://www.linkedin.com/search/results/people/?keywords=FirstName+LastName+CompanyName (URL-encode spaces as +). Do NOT guess a direct /in/ profile URL — direct URLs will point to the wrong person.",
-        "twitter_url": "https://x.com/handle — only include if you are highly confident from public knowledge (e.g. the person has a well-known public Twitter presence). Leave empty string if unsure. Do NOT guess."
+        "name": "only include people you have seen publicly named as founders or executives at this company",
+        "title": "their actual known title",
+        "linkedin_url": "LinkedIn people search URL: https://www.linkedin.com/search/results/people/?keywords=FirstName+LastName+CompanyName",
+        "twitter_url": "https://x.com/handle — only if you have seen this handle publicly. Empty string if unsure."
       }
     ]
   }
@@ -116,23 +175,7 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
     console.warn('generate-leads: response was truncated (hit max_tokens). Consider reducing count or fields.')
   }
 
-  let leads: Array<{
-    company_name: string
-    website_url: string
-    description: string
-    signal: string
-    use_case: string
-    tier: number
-    company_size: string
-    funding: string
-    why_boundless_fits: string
-    contacts?: Array<{
-      name: string
-      title: string
-      linkedin_url: string
-      twitter_url: string
-    }>
-  }>
+  let leads: LeadRow[]
 
   try {
     const text = content.text.trim()
@@ -145,6 +188,9 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
     console.error('generate-leads: JSON parse failed. stop_reason:', response.stop_reason, 'text length:', content.text.length, e)
     return 0
   }
+
+  // Verification pass — ask Claude to flag any hallucinated companies before saving
+  leads = await verifyLeads(leads)
 
   let inserted = 0
   for (const lead of leads) {
