@@ -36,6 +36,93 @@ function TimerBadge({ sentAt }: { sentAt: string | null }) {
   return <span className={`text-xs font-medium tabular-nums ${color}`}>{h}h {m}m left</span>
 }
 
+import type { Contact } from '@/lib/types'
+
+function EditableContact({ contact, onSaved }: { contact: Contact; onSaved: (c: Contact) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [fields, setFields] = useState({ name: contact.name, title: contact.title, linkedin_url: contact.linkedin_url, twitter_url: contact.twitter_url })
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/contacts/${contact.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      })
+      if (res.ok) {
+        const { contact: updated } = await res.json()
+        onSaved(updated)
+        setEditing(false)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cancel = () => {
+    setFields({ name: contact.name, title: contact.title, linkedin_url: contact.linkedin_url, twitter_url: contact.twitter_url })
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div className="bg-gray-50 rounded-xl p-3 flex flex-col gap-2">
+        <input value={fields.name} onChange={(e) => setFields(f => ({ ...f, name: e.target.value }))}
+          placeholder="Name" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
+        <input value={fields.title} onChange={(e) => setFields(f => ({ ...f, title: e.target.value }))}
+          placeholder="Title" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
+        <input value={fields.linkedin_url} onChange={(e) => setFields(f => ({ ...f, linkedin_url: e.target.value }))}
+          placeholder="LinkedIn URL" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
+        <input value={fields.twitter_url} onChange={(e) => setFields(f => ({ ...f, twitter_url: e.target.value }))}
+          placeholder="X / Twitter URL" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
+        <div className="flex gap-2 pt-0.5">
+          <button onClick={save} disabled={saving}
+            className="h-7 px-3 text-xs font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors">
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          <button onClick={cancel} className="h-7 px-3 text-xs text-gray-500 hover:text-gray-700 transition-colors">Cancel</button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center justify-between group">
+      <div>
+        <p className="text-sm font-medium text-gray-900">{contact.name}</p>
+        <p className="text-xs text-gray-400">{contact.title}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {contact.linkedin_url && (
+          <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer"
+            className="text-gray-300 hover:text-blue-500 transition-colors" title="Search on LinkedIn">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+            </svg>
+          </a>
+        )}
+        {contact.twitter_url && (
+          <a href={contact.twitter_url} target="_blank" rel="noopener noreferrer"
+            className="text-gray-300 hover:text-gray-800 transition-colors" title="X / Twitter">
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.741l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+          </a>
+        )}
+        <button onClick={() => setEditing(true)}
+          className="text-gray-200 hover:text-gray-500 transition-colors opacity-0 group-hover:opacity-100"
+          title="Edit contact">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const STAGE_CONFIG: Record<CRMStage, { label: string; accent: string; badge: string }> = {
@@ -268,6 +355,7 @@ function LeadDrawer({
   onOpenOutreach,
   onReportGenerated,
   onSentMessageSaved,
+  onContactUpdated,
 }: {
   lead: LeadWithContacts
   onClose: () => void
@@ -276,6 +364,7 @@ function LeadDrawer({
   onOpenOutreach: () => void
   onReportGenerated: (leadId: string, content: string) => void
   onSentMessageSaved: (leadId: string, content: string) => void
+  onContactUpdated: (leadId: string, contact: Contact) => void
 }) {
   const [stageSaving, setStageSaving] = useState(false)
   const [currentStage, setCurrentStage] = useState<CRMStage>(lead.crm_stage)
@@ -469,32 +558,9 @@ function LeadDrawer({
             {lead.contacts.length === 0 ? (
               <p className="text-sm text-gray-400">No contacts on file</p>
             ) : (
-              <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-3">
                 {lead.contacts.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{c.name}</p>
-                      <p className="text-xs text-gray-400">{c.title}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {c.linkedin_url && (
-                        <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer"
-                          className="text-gray-300 hover:text-blue-500 transition-colors" title="Search on LinkedIn">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-                          </svg>
-                        </a>
-                      )}
-                      {c.twitter_url && (
-                        <a href={c.twitter_url} target="_blank" rel="noopener noreferrer"
-                          className="text-gray-300 hover:text-gray-800 transition-colors" title="X / Twitter">
-                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.741l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                          </svg>
-                        </a>
-                      )}
-                    </div>
-                  </div>
+                  <EditableContact key={c.id} contact={c} onSaved={(updated) => onContactUpdated(lead.id, updated)} />
                 ))}
               </div>
             )}
@@ -634,6 +700,15 @@ export default function CRMPage() {
     if (selectedLead?.id === leadId) setSelectedLead((prev) => prev ? { ...prev, outreach_channel: channel } : null)
   }
 
+  const handleContactUpdated = (leadId: string, contact: Contact) => {
+    setLeads((prev) => prev.map((l) =>
+      l.id === leadId ? { ...l, contacts: l.contacts.map((c) => c.id === contact.id ? contact : c) } : l
+    ))
+    if (selectedLead?.id === leadId) {
+      setSelectedLead((prev) => prev ? { ...prev, contacts: prev.contacts.map((c) => c.id === contact.id ? contact : c) } : null)
+    }
+  }
+
   const handleSentMessageSaved = (leadId: string, content: string) => {
     const newEntry = { id: '', lead_id: leadId, contact_id: null, type: 'sent_message' as const, content, generated_at: new Date().toISOString() }
     setLeads((prev) => prev.map((l) =>
@@ -757,6 +832,7 @@ export default function CRMPage() {
           onOpenOutreach={() => setOutreachLead(selectedLead)}
           onReportGenerated={handleReportGenerated}
           onSentMessageSaved={handleSentMessageSaved}
+          onContactUpdated={handleContactUpdated}
         />
       )}
 

@@ -378,6 +378,25 @@ export async function getContactById(id: string): Promise<Contact | null> {
   return (rows[0] as Contact) || null
 }
 
+export async function updateContact(id: string, fields: {
+  name?: string
+  title?: string
+  linkedin_url?: string
+  twitter_url?: string
+}): Promise<Contact> {
+  const rows = await sql`
+    UPDATE contacts
+    SET
+      name         = COALESCE(${fields.name         ?? null}, name),
+      title        = COALESCE(${fields.title        ?? null}, title),
+      linkedin_url = COALESCE(${fields.linkedin_url ?? null}, linkedin_url),
+      twitter_url  = COALESCE(${fields.twitter_url  ?? null}, twitter_url)
+    WHERE id = ${id}
+    RETURNING *
+  `
+  return rows[0] as Contact
+}
+
 export async function deletePendingLeads(): Promise<number> {
   const rows = await sql`
     DELETE FROM leads WHERE status = 'pending' OR status = 'snoozed'
