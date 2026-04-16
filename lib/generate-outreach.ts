@@ -93,17 +93,19 @@ STRUCTURE FOR LINKEDIN DM (shorter):
 Greeting, hook, bridge only. Skip the Boundless intro. Close with interest check.
 
 STRUCTURE FOR CONNECTION NOTE (follow this template closely):
-"[Warm opener — one genuine sentence about what they're building. Not "impressive work" or "crushing it". Something specific.]  My team is building [use-case one-liner]. Would be good to connect."
+"Hey [First Name]. Big fan of what you guys are building at [Company]. My team is building [use-case one-liner]. Would be good to connect."
 
-Use-case one-liners to use verbatim:
-- payments: "a solution for confidential stablecoin payments with compliance controls built-in"
-- yield: "confidential onchain yield infrastructure with compliance built-in"
-- treasury: "a solution for confidential onchain treasury management with compliance controls built-in"
-- tokenization: "confidential tokenization infrastructure with compliance controls built-in"
+The opener is just "Big fan of what you guys are building at [Company]." — warm, genuine, human. Do NOT replace it with a researched observation or a specific claim about their positioning. That reads as AI-generated analysis, not a real person. Save the research for the DM. The connection note's only job is: who I am + what we're building + let's connect.
 
-Example output for payments: "Big fan of what you guys are building at [Company]. My team is building a solution for confidential stablecoin payments with compliance controls built-in. Would be good to connect."
+Use-case one-liners (use these verbatim):
+- payments: "a confidential stablecoin payment service, compliance-first by design"
+- yield: "confidential onchain yield infrastructure, compliance-first by design"
+- treasury: "a confidential onchain treasury management service, compliance-first by design"
+- tokenization: "confidential tokenization infrastructure, compliance-first by design"
 
-Under 300 characters total. The one-liner establishes context — do not expand it into a pitch.
+Example (payments): "Hey Nate. Big fan of what you guys are building at Agora. My team is building a confidential stablecoin payment service, compliance-first by design. Would be good to connect."
+
+Under 300 characters total.
 
 ---
 
