@@ -89,7 +89,7 @@ function EditableContact({ contact, onSaved }: { contact: Contact; onSaved: (c: 
   }
 
   return (
-    <div className="flex items-center justify-between group">
+    <div className="flex items-center justify-between">
       <div>
         <p className="text-sm font-medium text-gray-900">{contact.name}</p>
         <p className="text-xs text-gray-400">{contact.title}</p>
@@ -112,7 +112,7 @@ function EditableContact({ contact, onSaved }: { contact: Contact; onSaved: (c: 
           </a>
         )}
         <button onClick={() => setEditing(true)}
-          className="text-gray-200 hover:text-gray-500 transition-colors opacity-0 group-hover:opacity-100"
+          className="text-gray-300 hover:text-gray-600 transition-colors"
           title="Edit contact">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
