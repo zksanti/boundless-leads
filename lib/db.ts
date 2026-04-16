@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless'
-import type { Lead, Contact, Pattern, Outreach, LeadWithContacts, CRMStage, PatternInsight, SearchRefinement } from './types'
+import type { Lead, Contact, Pattern, Outreach, LeadWithContacts, CRMStage, OutreachChannel, PatternInsight, SearchRefinement } from './types'
 
 const sql = neon(process.env.POSTGRES_URL!)
 
@@ -29,6 +29,8 @@ export async function setupDatabase() {
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS funding TEXT DEFAULT ''`
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS crm_stage TEXT NOT NULL DEFAULT 'needs_outreach'`
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS is_priority BOOLEAN NOT NULL DEFAULT FALSE`
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS outreach_channel TEXT DEFAULT NULL`
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS outreach_sent_at TIMESTAMPTZ DEFAULT NULL`
 
   await sql`
     CREATE TABLE IF NOT EXISTS contacts (
@@ -294,7 +296,36 @@ export async function insertContact(contact: {
 }
 
 export async function updateCRMStage(leadId: string, stage: CRMStage): Promise<void> {
-  await sql`UPDATE leads SET crm_stage = ${stage} WHERE id = ${leadId}`
+  if (stage === 'outreach_sent') {
+    await sql`UPDATE leads SET crm_stage = ${stage}, outreach_sent_at = NOW() WHERE id = ${leadId}`
+  } else {
+    await sql`UPDATE leads SET crm_stage = ${stage} WHERE id = ${leadId}`
+  }
+}
+
+export async function setOutreachChannel(leadId: string, channel: OutreachChannel): Promise<void> {
+  await sql`UPDATE leads SET outreach_channel = ${channel} WHERE id = ${leadId}`
+}
+
+export async function saveSentMessage(leadId: string, content: string): Promise<Outreach> {
+  const rows = await sql`
+    INSERT INTO outreach (lead_id, contact_id, type, content)
+    VALUES (${leadId}, NULL, 'sent_message', ${content})
+    RETURNING *
+  `
+  return rows[0] as Outreach
+}
+
+export async function autoMoveExpiredOutreach(): Promise<number> {
+  const rows = await sql`
+    UPDATE leads
+    SET crm_stage = 'follow_up_due'
+    WHERE crm_stage = 'outreach_sent'
+      AND outreach_sent_at IS NOT NULL
+      AND outreach_sent_at < NOW() - INTERVAL '72 hours'
+    RETURNING id
+  `
+  return rows.length
 }
 
 export async function togglePriority(leadId: string): Promise<boolean> {

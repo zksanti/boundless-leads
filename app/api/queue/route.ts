@@ -1,8 +1,9 @@
-import { setupDatabase, getAcceptedLeads } from '@/lib/db'
+import { setupDatabase, autoMoveExpiredOutreach, getAcceptedLeads } from '@/lib/db'
 
 export async function GET() {
   try {
     await setupDatabase()
+    await autoMoveExpiredOutreach()
     const leads = await getAcceptedLeads()
     return Response.json(leads)
   } catch (error) {

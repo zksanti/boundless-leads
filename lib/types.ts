@@ -15,6 +15,8 @@ export type CRMStage =
   | 'closed_won'
   | 'closed_lost'
 
+export type OutreachChannel = 'linkedin' | 'x' | 'telegram'
+
 export interface Lead {
   id: string
   company_name: string
@@ -29,6 +31,8 @@ export interface Lead {
   status: LeadStatus
   crm_stage: CRMStage
   is_priority: boolean
+  outreach_channel: OutreachChannel | null
+  outreach_sent_at: string | null
   created_at: string
   swiped_at: string | null
   snooze_until: string | null
@@ -74,7 +78,7 @@ export interface Outreach {
   id: string
   lead_id: string
   contact_id: string | null
-  type: 'linkedin_connection' | 'linkedin_dm' | 'email' | 'research_report'
+  type: 'linkedin_connection' | 'linkedin_dm' | 'email' | 'research_report' | 'sent_message'
   content: string
   generated_at: string
 }

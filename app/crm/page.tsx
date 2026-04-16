@@ -1,8 +1,40 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import OutreachModal from '@/components/OutreachModal'
-import type { LeadWithContacts, CRMStage, UseCase } from '@/lib/types'
+import type { LeadWithContacts, CRMStage, UseCase, OutreachChannel } from '@/lib/types'
+
+const CHANNEL_CONFIG: Record<OutreachChannel, { label: string; badge: string }> = {
+  linkedin: { label: 'LinkedIn', badge: 'bg-blue-50 text-blue-700' },
+  x:        { label: 'X',        badge: 'bg-gray-100 text-gray-700' },
+  telegram: { label: 'Telegram', badge: 'bg-sky-50 text-sky-700' },
+}
+
+const FOLLOWUP_MS = 72 * 60 * 60 * 1000 // 72 hours in ms
+
+function useFollowUpTimer(sentAt: string | null) {
+  const [remainingMs, setRemainingMs] = useState<number>(() =>
+    sentAt ? FOLLOWUP_MS - (Date.now() - new Date(sentAt).getTime()) : FOLLOWUP_MS
+  )
+  useEffect(() => {
+    if (!sentAt) return
+    const tick = () => setRemainingMs(FOLLOWUP_MS - (Date.now() - new Date(sentAt).getTime()))
+    tick()
+    const id = setInterval(tick, 60_000)
+    return () => clearInterval(id)
+  }, [sentAt])
+  return remainingMs
+}
+
+function TimerBadge({ sentAt }: { sentAt: string | null }) {
+  const ms = useFollowUpTimer(sentAt)
+  if (!sentAt) return null
+  if (ms <= 0) return <span className="text-xs font-medium text-red-500">Follow up now</span>
+  const h = Math.floor(ms / 3_600_000)
+  const m = Math.floor((ms % 3_600_000) / 60_000)
+  const color = ms < 24 * 3_600_000 ? 'text-orange-500' : 'text-gray-400'
+  return <span className={`text-xs font-medium tabular-nums ${color}`}>{h}h {m}m left</span>
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -55,19 +87,28 @@ function TicketCard({
   onDragStart: (e: React.DragEvent) => void
   onTogglePriority: (e: React.MouseEvent) => void
 }) {
-  const hasOutreach = lead.outreach.some((o) => o.type !== 'research_report')
+  const hasOutreach = lead.outreach.some((o) => o.type !== 'research_report' && o.type !== 'sent_message')
   const hasReport   = lead.outreach.some((o) => o.type === 'research_report')
+  const hasSent     = lead.outreach.some((o) => o.type === 'sent_message')
+  const isOutreachSent = lead.crm_stage === 'outreach_sent'
+  const remainingMs = FOLLOWUP_MS - (lead.outreach_sent_at ? Date.now() - new Date(lead.outreach_sent_at).getTime() : 0)
+  const isExpired = isOutreachSent && lead.outreach_sent_at && remainingMs <= 0
+  const channel = lead.outreach_channel ? CHANNEL_CONFIG[lead.outreach_channel] : null
 
   return (
     <div
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
-      className={`bg-white rounded-xl p-3.5 cursor-pointer hover:shadow-sm transition-all active:opacity-70 select-none border ${
-        lead.is_priority ? 'border-orange-300 bg-orange-50/30' : 'border-gray-200 hover:border-gray-300'
+      className={`rounded-xl p-3.5 cursor-pointer hover:shadow-sm transition-all active:opacity-70 select-none border ${
+        isExpired
+          ? 'border-red-200 bg-red-50/40'
+          : lead.is_priority
+          ? 'border-orange-300 bg-orange-50/30'
+          : 'bg-white border-gray-200 hover:border-gray-300'
       }`}
     >
-      {/* Category + priority + tier */}
+      {/* Category + priority + channel/tier */}
       <div className="flex items-center justify-between mb-2.5">
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${USE_CASE_COLOR[lead.use_case] ?? 'bg-gray-100 text-gray-600'}`}>
           {lead.use_case}
@@ -80,7 +121,10 @@ function TicketCard({
           >
             ⚑
           </button>
-          <span className="text-xs text-gray-300 font-medium">T{lead.tier}</span>
+          {channel
+            ? <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${channel.badge}`}>{channel.label}</span>
+            : <span className="text-xs text-gray-300 font-medium">T{lead.tier}</span>
+          }
         </div>
       </div>
 
@@ -93,7 +137,10 @@ function TicketCard({
       {/* Footer */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {lead.contacts.length > 0 && (
+          {isOutreachSent && lead.outreach_sent_at && (
+            <TimerBadge sentAt={lead.outreach_sent_at} />
+          )}
+          {!isOutreachSent && lead.contacts.length > 0 && (
             <span className="text-xs text-gray-400">
               {lead.contacts.length} contact{lead.contacts.length > 1 ? 's' : ''}
             </span>
@@ -101,7 +148,8 @@ function TicketCard({
         </div>
         <div className="flex items-center gap-1.5">
           {hasOutreach && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" title="Outreach drafted" />}
-          {hasReport && <span className="w-1.5 h-1.5 rounded-full bg-violet-400" title="Report generated" />}
+          {hasSent    && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Message logged" />}
+          {hasReport  && <span className="w-1.5 h-1.5 rounded-full bg-violet-400" title="Report generated" />}
         </div>
       </div>
     </div>
@@ -216,30 +264,43 @@ function LeadDrawer({
   lead,
   onClose,
   onStageChange,
+  onChannelChange,
   onOpenOutreach,
   onReportGenerated,
+  onSentMessageSaved,
 }: {
   lead: LeadWithContacts
   onClose: () => void
   onStageChange: (leadId: string, stage: CRMStage) => void
+  onChannelChange: (leadId: string, channel: OutreachChannel) => void
   onOpenOutreach: () => void
   onReportGenerated: (leadId: string, content: string) => void
+  onSentMessageSaved: (leadId: string, content: string) => void
 }) {
   const [stageSaving, setStageSaving] = useState(false)
   const [currentStage, setCurrentStage] = useState<CRMStage>(lead.crm_stage)
+  const [currentChannel, setCurrentChannel] = useState<OutreachChannel | null>(lead.outreach_channel)
   const [generatingReport, setGeneratingReport] = useState(false)
   const [reportContent, setReportContent] = useState<string | null>(
     lead.outreach.find((o) => o.type === 'research_report')?.content ?? null
   )
   const [showReport, setShowReport] = useState(false)
+  const [sentMessage, setSentMessage] = useState(
+    lead.outreach.find((o) => o.type === 'sent_message')?.content ?? ''
+  )
+  const [savingSent, setSavingSent] = useState(false)
+  const [sentSaved, setSentSaved] = useState(!!lead.outreach.find((o) => o.type === 'sent_message'))
   const drawerRef = useRef<HTMLDivElement>(null)
 
   // Reset when lead changes
   useEffect(() => {
     setCurrentStage(lead.crm_stage)
+    setCurrentChannel(lead.outreach_channel)
     setReportContent(lead.outreach.find((o) => o.type === 'research_report')?.content ?? null)
+    setSentMessage(lead.outreach.find((o) => o.type === 'sent_message')?.content ?? '')
+    setSentSaved(!!lead.outreach.find((o) => o.type === 'sent_message'))
     setShowReport(false)
-  }, [lead.id, lead.crm_stage, lead.outreach])
+  }, [lead.id, lead.crm_stage, lead.outreach_channel, lead.outreach])
 
   const handleStageChange = async (stage: CRMStage) => {
     setStageSaving(true)
@@ -253,6 +314,34 @@ function LeadDrawer({
       onStageChange(lead.id, stage)
     } finally {
       setStageSaving(false)
+    }
+  }
+
+  const handleChannelChange = async (channel: OutreachChannel) => {
+    setCurrentChannel(channel)
+    await fetch(`/api/leads/${lead.id}/channel`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel }),
+    })
+    onChannelChange(lead.id, channel)
+  }
+
+  const handleSaveSent = async () => {
+    if (!sentMessage.trim()) return
+    setSavingSent(true)
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/sent-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: sentMessage.trim() }),
+      })
+      if (res.ok) {
+        setSentSaved(true)
+        onSentMessageSaved(lead.id, sentMessage.trim())
+      }
+    } finally {
+      setSavingSent(false)
     }
   }
 
@@ -313,9 +402,9 @@ function LeadDrawer({
           <button onClick={onClose} className="flex-shrink-0 text-gray-400 hover:text-gray-600 text-lg leading-none mt-0.5">✕</button>
         </div>
 
-        {/* Stage selector */}
+        {/* Stage + channel row */}
         <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Stage</span>
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-shrink-0">Stage</span>
           <div className="flex-1">
             <select
               value={currentStage}
@@ -330,6 +419,28 @@ function LeadDrawer({
           </div>
           {stageSaving && <div className="w-3.5 h-3.5 border border-gray-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />}
         </div>
+
+        {/* Channel selector — shown once stage is outreach_sent or beyond */}
+        {['outreach_sent','follow_up_due','replied','call_scheduled','post_call','in_evaluation','proposal_sent','nurture','closed_won','closed_lost'].includes(currentStage) && (
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-shrink-0">Channel</span>
+            <div className="flex gap-1.5">
+              {(['linkedin', 'x', 'telegram'] as OutreachChannel[]).map((ch) => (
+                <button
+                  key={ch}
+                  onClick={() => handleChannelChange(ch)}
+                  className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                    currentChannel === ch
+                      ? CHANNEL_CONFIG[ch].badge + ' ring-1 ring-inset ring-current'
+                      : 'bg-gray-100 text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {CHANNEL_CONFIG[ch].label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto">
@@ -388,6 +499,27 @@ function LeadDrawer({
               </div>
             )}
           </div>
+
+          {/* Sent message log */}
+          {['outreach_sent','follow_up_due','replied','call_scheduled','post_call','in_evaluation','proposal_sent','nurture','closed_won','closed_lost'].includes(currentStage) && (
+            <div className="px-5 py-4 border-b border-gray-100">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Sent message</p>
+              <textarea
+                value={sentMessage}
+                onChange={(e) => { setSentMessage(e.target.value); setSentSaved(false) }}
+                placeholder="Paste the message you sent..."
+                rows={4}
+                className="w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-gray-300 mb-2"
+              />
+              <button
+                onClick={handleSaveSent}
+                disabled={savingSent || !sentMessage.trim() || sentSaved}
+                className="h-8 px-3 text-xs font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition-colors"
+              >
+                {savingSent ? 'Saving...' : sentSaved ? 'Saved' : 'Save message'}
+              </button>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="px-5 py-4 flex flex-col gap-2.5">
@@ -474,20 +606,42 @@ export default function CRMPage() {
     }
   }
 
-  const handleDrop = async (leadId: string, newStage: CRMStage) => {
+  const handleDrop = useCallback(async (leadId: string, newStage: CRMStage) => {
     const lead = leads.find((l) => l.id === leadId)
     if (!lead || lead.crm_stage === newStage) return
-    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, crm_stage: newStage } : l))
-    if (selectedLead?.id === leadId) setSelectedLead((prev) => prev ? { ...prev, crm_stage: newStage } : null)
+    const now = new Date().toISOString()
+    const update = { crm_stage: newStage, ...(newStage === 'outreach_sent' ? { outreach_sent_at: now } : {}) }
+    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, ...update } : l))
+    if (selectedLead?.id === leadId) setSelectedLead((prev) => prev ? { ...prev, ...update } : null)
     await fetch(`/api/leads/${leadId}/stage`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: newStage }),
     })
-  }
+  }, [leads, selectedLead])
 
   const handleStageChange = (leadId: string, stage: CRMStage) => {
-    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, crm_stage: stage } : l))
+    const now = new Date().toISOString()
+    setLeads((prev) => prev.map((l) =>
+      l.id === leadId
+        ? { ...l, crm_stage: stage, ...(stage === 'outreach_sent' ? { outreach_sent_at: now } : {}) }
+        : l
+    ))
+  }
+
+  const handleChannelChange = (leadId: string, channel: OutreachChannel) => {
+    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, outreach_channel: channel } : l))
+    if (selectedLead?.id === leadId) setSelectedLead((prev) => prev ? { ...prev, outreach_channel: channel } : null)
+  }
+
+  const handleSentMessageSaved = (leadId: string, content: string) => {
+    const newEntry = { id: '', lead_id: leadId, contact_id: null, type: 'sent_message' as const, content, generated_at: new Date().toISOString() }
+    setLeads((prev) => prev.map((l) =>
+      l.id === leadId ? { ...l, outreach: [...l.outreach.filter(o => o.type !== 'sent_message'), newEntry] } : l
+    ))
+    if (selectedLead?.id === leadId) {
+      setSelectedLead((prev) => prev ? { ...prev, outreach: [...prev.outreach.filter(o => o.type !== 'sent_message'), newEntry] } : null)
+    }
   }
 
   const handleReportGenerated = (leadId: string, content: string) => {
@@ -599,8 +753,10 @@ export default function CRMPage() {
           lead={selectedLead}
           onClose={() => setSelectedLead(null)}
           onStageChange={handleStageChange}
+          onChannelChange={handleChannelChange}
           onOpenOutreach={() => setOutreachLead(selectedLead)}
           onReportGenerated={handleReportGenerated}
+          onSentMessageSaved={handleSentMessageSaved}
         />
       )}
 
