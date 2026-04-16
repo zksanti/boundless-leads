@@ -243,6 +243,49 @@ function TicketCard({
   )
 }
 
+function AddContactForm({ leadId, onSaved, onCancel }: { leadId: string; onSaved: (c: Contact) => void; onCancel: () => void }) {
+  const [fields, setFields] = useState({ name: '', title: '', linkedin_url: '', twitter_url: '' })
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    if (!fields.name.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/leads/${leadId}/contacts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      })
+      if (res.ok) {
+        const { contact } = await res.json()
+        onSaved(contact)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-gray-50 rounded-xl p-3 flex flex-col gap-2">
+      <input value={fields.name} onChange={(e) => setFields(f => ({ ...f, name: e.target.value }))}
+        placeholder="Name *" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
+      <input value={fields.title} onChange={(e) => setFields(f => ({ ...f, title: e.target.value }))}
+        placeholder="Title" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
+      <input value={fields.linkedin_url} onChange={(e) => setFields(f => ({ ...f, linkedin_url: e.target.value }))}
+        placeholder="LinkedIn URL" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
+      <input value={fields.twitter_url} onChange={(e) => setFields(f => ({ ...f, twitter_url: e.target.value }))}
+        placeholder="X / Twitter URL" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
+      <div className="flex gap-2 pt-0.5">
+        <button onClick={save} disabled={saving || !fields.name.trim()}
+          className="h-7 px-3 text-xs font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors">
+          {saving ? 'Saving...' : 'Add contact'}
+        </button>
+        <button onClick={onCancel} className="h-7 px-3 text-xs text-gray-500 hover:text-gray-700 transition-colors">Cancel</button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Board column ──────────────────────────────────────────────────────────────
 
 function BoardColumn({
@@ -356,6 +399,7 @@ function LeadDrawer({
   onReportGenerated,
   onSentMessageSaved,
   onContactUpdated,
+  onContactAdded,
 }: {
   lead: LeadWithContacts
   onClose: () => void
@@ -365,6 +409,7 @@ function LeadDrawer({
   onReportGenerated: (leadId: string, content: string) => void
   onSentMessageSaved: (leadId: string, content: string) => void
   onContactUpdated: (leadId: string, contact: Contact) => void
+  onContactAdded: (leadId: string, contact: Contact) => void
 }) {
   const [stageSaving, setStageSaving] = useState(false)
   const [currentStage, setCurrentStage] = useState<CRMStage>(lead.crm_stage)
@@ -379,6 +424,7 @@ function LeadDrawer({
   )
   const [savingSent, setSavingSent] = useState(false)
   const [sentSaved, setSentSaved] = useState(!!lead.outreach.find((o) => o.type === 'sent_message'))
+  const [addingContact, setAddingContact] = useState(false)
   const drawerRef = useRef<HTMLDivElement>(null)
 
   // Reset when lead changes
@@ -554,16 +600,30 @@ function LeadDrawer({
 
           {/* Contacts */}
           <div className="px-5 py-4 border-b border-gray-100">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2.5">Contacts</p>
-            {lead.contacts.length === 0 ? (
-              <p className="text-sm text-gray-400">No contacts on file</p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {lead.contacts.map((c) => (
-                  <EditableContact key={c.id} contact={c} onSaved={(updated) => onContactUpdated(lead.id, updated)} />
-                ))}
-              </div>
-            )}
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Contacts</p>
+              <button
+                onClick={() => setAddingContact(true)}
+                className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
+              >
+                + Add
+              </button>
+            </div>
+            <div className="flex flex-col gap-3">
+              {lead.contacts.map((c) => (
+                <EditableContact key={c.id} contact={c} onSaved={(updated) => onContactUpdated(lead.id, updated)} />
+              ))}
+              {lead.contacts.length === 0 && !addingContact && (
+                <p className="text-sm text-gray-400">No contacts on file</p>
+              )}
+              {addingContact && (
+                <AddContactForm
+                  leadId={lead.id}
+                  onSaved={(c) => { onContactAdded(lead.id, c); setAddingContact(false) }}
+                  onCancel={() => setAddingContact(false)}
+                />
+              )}
+            </div>
           </div>
 
           {/* Sent message log */}
@@ -700,6 +760,13 @@ export default function CRMPage() {
     if (selectedLead?.id === leadId) setSelectedLead((prev) => prev ? { ...prev, outreach_channel: channel } : null)
   }
 
+  const handleContactAdded = (leadId: string, contact: Contact) => {
+    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, contacts: [...l.contacts, contact] } : l))
+    if (selectedLead?.id === leadId) {
+      setSelectedLead((prev) => prev ? { ...prev, contacts: [...prev.contacts, contact] } : null)
+    }
+  }
+
   const handleContactUpdated = (leadId: string, contact: Contact) => {
     setLeads((prev) => prev.map((l) =>
       l.id === leadId ? { ...l, contacts: l.contacts.map((c) => c.id === contact.id ? contact : c) } : l
@@ -833,6 +900,7 @@ export default function CRMPage() {
           onReportGenerated={handleReportGenerated}
           onSentMessageSaved={handleSentMessageSaved}
           onContactUpdated={handleContactUpdated}
+          onContactAdded={handleContactAdded}
         />
       )}
 
