@@ -95,8 +95,8 @@ Generate ${count} qualified leads. Return ONLY a JSON array, no markdown:
       {
         "name": "string",
         "title": "CEO / Co-founder / CTO / Head of Compliance — pick the most relevant decision-maker",
-        "linkedin_url": "https://linkedin.com/in/... (best guess from known info, leave empty string if unknown)",
-        "twitter_url": "https://x.com/... (best guess, leave empty string if unknown)"
+        "linkedin_url": "LinkedIn people search URL — ALWAYS use this format: https://www.linkedin.com/search/results/people/?keywords=FirstName+LastName+CompanyName (URL-encode spaces as +). Do NOT guess a direct /in/ profile URL — direct URLs will point to the wrong person.",
+        "twitter_url": "https://x.com/handle — only include if you are highly confident from public knowledge (e.g. the person has a well-known public Twitter presence). Leave empty string if unsure. Do NOT guess."
       }
     ]
   }
