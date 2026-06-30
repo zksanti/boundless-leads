@@ -50,10 +50,10 @@ export async function generateOutreach(
   const contactFirstName = contact ? firstName(contact.name) : null
   const contactLine = contact ? `Contact: ${contact.name}, ${contact.title}` : 'No specific contact'
 
-  const prompt = `You are writing customer-discovery outreach on behalf of the Boundless team. This is DISCOVERY, not sales. The goal is a reply and a short conversation where we LEARN about how they run their workload, not to pitch or close.
+  const prompt = `You are writing a first-touch LinkedIn/email outreach on behalf of the Boundless team (sent from the CEO's account). The goal is to pique interest and get a reply. Lead with a credible value hook, not a question. Do NOT try to qualify them or ask them to reveal cost/usage data in the first message: a stranger will not hand that over before they know us.
 
-ABOUT BOUNDLESS (keep this in the background, do not pitch it):
-Boundless runs a distributed GPU cloud for large-scale, non-latency-critical AI workloads: batch inference, eval suites, synthetic data, document processing, agent runs, image/video generation on open and custom models. It is built for teams that are throughput- and cost-bound, not latency-bound.
+ABOUT BOUNDLESS:
+Boundless is building an efficient inference cloud that helps teams achieve up to 50% cost savings on large-scale, non-latency-critical AI workloads: batch inference, eval suites, synthetic data, document processing, agent runs, image/video generation on open and custom models. It serves teams that are throughput- and cost-bound, not latency-bound.
 
 PROSPECT CONTEXT:
 Company: ${lead.company_name}
@@ -77,34 +77,33 @@ Do 1-3 searches. If you cannot find anything specific, fall back to the signal a
 
 STEP 2 — WRITE THE MESSAGES.
 
-The whole point: these must NOT read like the templated sales blasts that got zero replies. Those failed because they pitched ("high-performance cloud", "cut costs 50%"), asked the prospect to hand over data ("let us analyze your bill"), and assigned homework ("what's a good benchmark to test?"). Do the opposite.
+Structure every message in three beats: (1) one line of specific personalization that names the GPU-heavy workload they actually run (from your research), so it is obviously not a blast; (2) the value hook: we are building an efficient inference cloud that helps teams like them achieve up to 50% cost savings; (3) a frictionless CTA that OFFERS proof and costs them nothing to accept, e.g. "Worth me sending over the benchmark?" or "Want me to send the numbers?" A yes/no that reveals nothing on their side.
 
-DISCOVERY RULES:
-1. Lead with THEIR world. Open by naming the specific workload they run (from your research). Make it clear you understand what they actually do at scale.
-2. Ask exactly ONE genuine, curious question about the reality of running that workload: cost, throughput, queue time, rate limits, or GPU availability. It should be answerable in one line and feel like a peer is curious, not a vendor qualifying them.
-3. NO pitch. Do not describe Boundless as a product, do not claim any savings or percentages, do not offer a free analysis, cost comparison, trial, or benchmark.
-4. At most ONE short, low-key sentence on who you are, and only if it helps the question land (e.g. "I'm with Boundless, we run GPU capacity for batch and eval workloads"). Frame it as context for why you're curious, never as an offer.
-5. Sound like a peer who runs infrastructure, not a salesperson. No flattery they already know about themselves.
+RULES:
+1. Personalization first, in one line. Show you understand their specific workload and scale. No flattery they already know about themselves.
+2. Lead with the value, not a question. Do NOT ask them to explain their cost, throughput, or usage. Do NOT try to qualify them in the first message.
+3. State the value as capability: "helps teams achieve up to 50% cost savings". Do NOT claim a specific named customer result unless one is given to you.
+4. The CTA offers proof (the benchmark / the numbers) and is answerable in one word. Never demand a meeting, never ask for their data.
+5. Sound like a peer exec who understands their workload, not a salesperson.
 
-BANNED (these are exactly what failed):
-- "high-performance cloud", "built for AI workloads", "based on our current customer base"
-- any savings claim: "cut your costs", "cut your bill", "X% cheaper", "save up to", "lower your spend"
-- "side-by-side cost comparison", "analyze your costs/usage/bill", "for free", "run a benchmark", "what's a good benchmark/workload to test"
-- "great fit", "I'd love to", "I came across", "hope this finds you well", "quick question", "reaching out"
-- the words "cheap" / "cheaper"
+BANNED (these are exactly what failed before):
+- "distributed GPU cloud" (say "efficient inference cloud"), "high-performance cloud", "based on our current customer base"
+- asking them to hand over or analyze their data: "let us analyze your bill/usage", "side-by-side cost comparison", "for free", "what's a good benchmark/workload to test"
+- "great fit", "I came across", "hope this finds you well", "quick question", "reaching out"
+- the words "cheap" / "cheaper" (use "lower cost" / "cost savings")
 - em dashes (the — character) anywhere. Use a comma, period, or rewrite.
 
 CHANNEL SPECS:
 
 linkedin_connection (connection note, UNDER 300 characters):
-"Hey ${contactFirstName ?? '[First name]'}," then one sentence naming their specific workload + one short curious line, then a soft "Would be good to connect." No question mark spam, no pitch.
+"Hey ${contactFirstName ?? '[First name]'}," then one sentence naming their specific workload, then the value hook in brief (up to 50% cost savings), then a soft "Would be good to connect." No question, no data ask.
 
 linkedin_dm (under 70 words):
-Greeting, then 2-3 short sentences: name the specific workload, ask the one curious question, optionally one low-key line on who you are. End on the question or a light "curious how you think about this."
+Greeting, then the three beats: personalization line, value hook, frictionless proof-offer CTA. End on the CTA (a yes/no like "Worth me sending the benchmark?").
 
 email (under 110 words):
-- Subject: 2-4 words, all lowercase, no punctuation. Should read like a note from a peer, e.g. "eval throughput", "your batch pipeline".
-- Body: "Hey ${contactFirstName ?? '[First name]'}," then the specific-workload hook, then the one curious question, optional one-line who-we-are, then a soft close like "Curious how you're handling this as you scale?" Never a hard meeting ask.
+- Subject: 2-4 words, all lowercase, no punctuation, e.g. "inference costs", "your batch pipeline".
+- Body: "Hey ${contactFirstName ?? '[First name]'}," then the personalization line, the value hook (up to 50% cost savings), and the proof-offer CTA. No qualifying question, no meeting demand.
 
 ---
 
