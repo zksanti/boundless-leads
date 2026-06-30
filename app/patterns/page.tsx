@@ -2,17 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { Pattern, PatternInsight, SearchRefinement } from '@/lib/types'
-
-const USE_CASE_COLOR: Record<string, string> = {
-  payments:     'bg-blue-500',
-  yield:        'bg-emerald-500',
-  treasury:     'bg-violet-500',
-  tokenization: 'bg-amber-500',
-}
-
-const USE_CASE_LABEL: Record<string, string> = {
-  payments: 'Payments', yield: 'Yield', treasury: 'Treasury', tokenization: 'Tokenization',
-}
+import { WORKLOADS, WORKLOAD_KEYS } from '@/lib/workloads'
 
 function InsightCard({
   insight,
@@ -180,7 +170,7 @@ export default function PatternsPage() {
   const totalMatches = patterns.reduce((s, p) => s + p.right_swipes, 0)
   const nextMilestone = (Math.floor(swipeCount / 20) + 1) * 20
 
-  const byUseCase = ['payments', 'yield', 'treasury', 'tokenization'].map((uc) => {
+  const byUseCase = WORKLOAD_KEYS.map((uc) => {
     const rows = patterns.filter((p) => p.use_case === uc)
     const right = rows.reduce((s, p) => s + p.right_swipes, 0)
     const left = rows.reduce((s, p) => s + p.left_swipes, 0)
@@ -252,7 +242,7 @@ export default function PatternsPage() {
             .map((uc) => (
               <div key={uc.use_case} className="bg-white border border-gray-200 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="font-medium text-gray-900 text-sm">{USE_CASE_LABEL[uc.use_case]}</span>
+                  <span className="font-medium text-gray-900 text-sm">{WORKLOADS[uc.use_case]?.label ?? uc.use_case}</span>
                   <div className="flex items-center gap-3 text-sm">
                     <span className="text-emerald-600 font-medium">{uc.right} ♥</span>
                     <span className="text-red-400">{uc.left} ✕</span>
@@ -263,7 +253,7 @@ export default function PatternsPage() {
                 </div>
                 <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${USE_CASE_COLOR[uc.use_case]}`}
+                    className={`h-full rounded-full transition-all ${WORKLOADS[uc.use_case]?.bar ?? 'bg-gray-400'}`}
                     style={{ width: `${uc.rate ?? 0}%` }}
                   />
                 </div>

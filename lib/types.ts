@@ -1,4 +1,6 @@
-export type UseCase = 'payments' | 'yield' | 'treasury' | 'tokenization'
+// Workload segments for the inference-cloud ICP. The DB column is still named
+// `use_case` for migration simplicity, but it now carries the GPU-workload type.
+export type UseCase = 'evals' | 'synth_data' | 'agents' | 'docs' | 'media' | 'batch'
 export type Tier = 1 | 2
 export type SwipeDirection = 'right' | 'left' | 'down'
 export type LeadStatus = 'pending' | 'accepted' | 'rejected' | 'snoozed'

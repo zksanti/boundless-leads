@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import OutreachModal from '@/components/OutreachModal'
 import type { LeadWithContacts, CRMStage, UseCase, OutreachChannel } from '@/lib/types'
+import { WORKLOADS, WORKLOAD_KEYS } from '@/lib/workloads'
 
 const CHANNEL_CONFIG: Record<OutreachChannel, { label: string; badge: string }> = {
   linkedin: { label: 'LinkedIn', badge: 'bg-blue-50 text-blue-700' },
@@ -148,12 +149,6 @@ const ALL_STAGES: CRMStage[] = [
   ...BOARD_STAGES, 'nurture', 'closed_won', 'closed_lost',
 ]
 
-const USE_CASE_COLOR: Record<string, string> = {
-  payments:     'bg-blue-50 text-blue-700',
-  yield:        'bg-emerald-50 text-emerald-700',
-  treasury:     'bg-violet-50 text-violet-700',
-  tokenization: 'bg-amber-50 text-amber-700',
-}
 
 function buildCalendarUrl(name: string) {
   const text = encodeURIComponent(`Boundless / ${name}`)
@@ -197,8 +192,8 @@ function TicketCard({
     >
       {/* Category + priority + channel/tier */}
       <div className="flex items-center justify-between mb-2.5">
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${USE_CASE_COLOR[lead.use_case] ?? 'bg-gray-100 text-gray-600'}`}>
-          {lead.use_case}
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${WORKLOADS[lead.use_case]?.chip ?? 'bg-gray-100 text-gray-600'}`}>
+          {WORKLOADS[lead.use_case]?.label ?? lead.use_case}
         </span>
         <div className="flex items-center gap-1.5">
           <button
@@ -526,8 +521,8 @@ function LeadDrawer({
               )}
             </div>
             <div className="flex items-center flex-wrap gap-1.5">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${USE_CASE_COLOR[lead.use_case] ?? 'bg-gray-100 text-gray-600'}`}>
-                {lead.use_case}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${WORKLOADS[lead.use_case]?.chip ?? 'bg-gray-100 text-gray-600'}`}>
+                {WORKLOADS[lead.use_case]?.label ?? lead.use_case}
               </span>
               <span className="text-xs text-gray-400">Tier {lead.tier}</span>
               {lead.company_size && <span className="text-xs text-gray-400">· {lead.company_size}</span>}
@@ -594,7 +589,7 @@ function LeadDrawer({
 
           {/* Why it fits */}
           <div className="px-5 py-4 border-b border-gray-100">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Why Boundless fits</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Why it fits</p>
             <p className="text-sm text-gray-700 leading-relaxed">{lead.why_boundless_fits}</p>
           </div>
 
@@ -845,15 +840,15 @@ export default function CRMPage() {
 
           {/* Service filter */}
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
-            {(['all', 'payments', 'yield', 'treasury', 'tokenization'] as const).map((f) => (
+            {(['all', ...WORKLOAD_KEYS] as (UseCase | 'all')[]).map((f) => (
               <button
                 key={f}
                 onClick={() => setServiceFilter(f)}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors capitalize ${
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
                   serviceFilter === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {f}
+                {f === 'all' ? 'All' : WORKLOADS[f].label}
               </button>
             ))}
           </div>

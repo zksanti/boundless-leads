@@ -14,7 +14,7 @@ export async function generateInsight(
       .map((l) => `- ${l.company_name} (${l.use_case}, Tier ${l.tier}): ${l.description} | Signal: ${l.signal}`)
       .join('\n') || '  (none yet)'
 
-  const prompt = `You are analyzing a sales rep's lead swipe behavior for Boundless (compliance infrastructure for onchain finance: payments, yield, treasury, tokenization on public chains).
+  const prompt = `You are analyzing a researcher's lead swipe behavior for Boundless (a distributed GPU cloud for non-latency-critical AI workloads: evals, synthetic data, agent runs, document processing, image/video, and batch inference). This is customer-discovery prospecting.
 
 LEADS THEY ACCEPTED (${accepted.length}):
 ${fmt(accepted)}
@@ -22,7 +22,7 @@ ${fmt(accepted)}
 LEADS THEY PASSED ON (${rejected.length}):
 ${fmt(rejected)}
 
-Analyze the patterns. Look for: use case preference, company type (fintech vs TradFi vs DeFi), maturity stage, signals that triggered acceptance, signals that triggered rejection, tier preference.
+Analyze the patterns. Look for: workload-type preference, company type and product category, maturity stage (seed through Series B), the kind of cost/throughput signal that triggered acceptance, signals that triggered rejection, tier preference.
 
 Return ONLY valid JSON, no markdown:
 {

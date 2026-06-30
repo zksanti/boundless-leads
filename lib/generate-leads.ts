@@ -4,9 +4,19 @@ import type { Pattern } from './types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
+// Companies the product team has already reached out to (see the outbound
+// tracker). Excluded so the tool surfaces net-new leads rather than regenerating
+// the existing funnel.
 const PIPELINE_EXCLUSIONS = [
-  'm0', 'xrp ledger', 'stellar', 'anchorage digital', 'wisdomtree',
-  'circle', 'nethermind', 'plaid', 'fidelity', 'corpay', 'moneygram',
+  'braintrust', 'galileo', 'patronus ai', 'patronus', 'langwatch', 'giskard',
+  'future agi', 'pulse', 'aryn', 'retab', 'evenup', 'supio', 'unsiloed ai',
+  'unsiloed', 'extend', 'elicit', 'confident ai', 'deepeval', 'answerthis',
+  'docupipe', 'pathnovo', 'applied compute', 'checkstep', 'oumi', 'decoverai',
+  'unstract', 'datologyai', 'snorkel ai', 'snorkel', 'layerlens', 'labelbox',
+  'arize phoenix', 'arize', 'photoroom', 'unstructured', 'langfuse',
+  'kilo code', 'saolaai', 'saola', 'simbian', 'dropzone ai', 'dropzone',
+  'fiddler ai', 'fiddler', 'patlytics', 'everlaw', 'comet', 'opik',
+  'protege', 'nanonets',
 ]
 
 function buildPatternContext(patterns: Pattern[]): string {
@@ -85,49 +95,43 @@ export async function generateLeads(count = 20): Promise<number> {
     ...existingNames,
   ]
 
-  const prompt = `You are a B2B sales researcher for Boundless, a compliance infrastructure company for onchain finance.
+  const prompt = `You are a customer-discovery researcher for Boundless, which runs a distributed GPU cloud for large-scale, non-latency-critical AI workloads.
 
 BOUNDLESS CONTEXT:
-Category: Compliance infrastructure for onchain finance
-Core promise: Go onchain without exposing company data
-Services: Boundless Payments, Boundless Treasury, Boundless Yield, Boundless Tokenization
-- Boundless Payments: confidential stablecoin payment flows — hides transaction amounts, counterparties, routing
-- Boundless Yield: confidential onchain yield deployment — hides protocol allocations, position sizes, yield strategies
-- Boundless Treasury: confidential onchain treasury management — hides balance visibility, movement timing
-- Boundless Tokenization: compliant tokenized asset issuance with privacy on public chains
-Audience: institutions, fintechs, platforms — NOT consumers
+What it is: a distributed GPU cloud built for throughput- and cost-bound AI workloads, not latency-bound ones.
+What it runs well today: async and batch inference, eval suites, synthetic data generation, document processing, agent runs, and image/video generation on open and custom models (roughly 8B-70B class).
+In scope: workloads that tolerate a queue and low-ish latency (around 500ms time-to-first-token is fine), where cost and throughput matter more than tail latency.
+We are doing CUSTOMER DISCOVERY. The goal is to find teams who feel this pain TODAY so we can learn from them, not to close deals.
 
-ICP — TIER 1 (prioritize):
-- Stablecoin platforms with compliance requirements
-- Crypto-native fintechs with institutional clients
-- Digital asset platforms on public chains
-- DeFi protocols adding institutional products
-- Neobanks/payment fintechs moving flows onchain
+ICP — THE FIVE PILLARS (a strong lead clears most of these):
+1. Runs recurring GPU-heavy workloads: eval suites, release gates, synthetic data, agent runs, document processing, or video/image generation.
+2. Feels real pain right now around cost, throughput, queue time, rate limits, or GPU availability.
+3. Workload does NOT need ultra-low latency. Low-ish latency, async, and batch jobs are all in scope (~500ms TTFT is fine).
+4. The buyer is reachable and pragmatic: founder, CTO, infra lead, ML platform lead, eval lead, or workflow owner at a seed through Series-B-ish team.
+5. No hard privacy/compliance blocker that prevents testing external compute right now (this typically excludes healthcare, finance, and large corps — support comes later).
 
-ICP — TIER 2:
-- TradFi teams running onchain pilots (asset managers, custodians)
-- Cross-border payment processors evaluating stablecoins
-- L1/L2 ecosystem partners whose clients need compliance
+TIER 1 (prioritize): clears all five pillars, with a clearly named recurring GPU workload and an obvious cost/throughput pain.
+TIER 2: plausible fit but one pillar is soft (e.g. latency needs are borderline, or the buyer is harder to reach).
 
-HIGH URGENCY SIGNALS:
-- Just announced a stablecoin product or raised for digital assets
-- Hiring "blockchain compliance" or "digital assets compliance" roles
-- Recently partnered with a chain or protocol
-- CEO/CPO posting about institutional DeFi or stablecoin strategy
-- MiCA compliance pressure (EU, CASP deadline July 1, 2026)
+HIGH-SIGNAL INDICATORS:
+- Public writing/benchmarks about inference cost, GPU spend, or scaling a batch/eval pipeline
+- Hiring ML platform / inference infra / eval roles
+- Pricing with per-page / per-token / volume tiers (implies high-volume background inference)
+- Founder or infra lead posting about GPU availability, rate limits, or cost
+- Recently raised and scaling a compute-heavy product
 
 DISQUALIFY:
-- Pure crypto-native, no institutional user base
-- Seed / pre-product
-- Building their own private chain
-- Consumer-only
+- Hard privacy/compliance blocker (healthcare, finance, regulated enterprise, government)
+- Latency-critical only (real-time chat, sub-second consumer-facing inference) with no async/batch workload
+- Large incumbents with locked-in cloud commitments
+- Pre-product / no real workload yet
 
-DO NOT INCLUDE (already in pipeline):
+DO NOT INCLUDE (already contacted or excluded):
 ${excluded.join(', ')}
 ${patternContext}${refinements.length > 0 ? `\nUSER SEARCH PREFERENCES (apply these):\n${refinements.map((r) => `  - ${r.content}`).join('\n')}\n` : ''}
 CRITICAL — READ BEFORE GENERATING:
 
-You are RECALLING real companies from your training data, not inventing companies that fit a template. Every company you list must be one you have seen in public sources (news articles, funding announcements, job postings, company blogs, press releases). If you are not certain a company exists and matches these criteria, do not include it.
+You are RECALLING real companies from your training data, not inventing companies that fit a template. Every company you list must be one you have seen in public sources (news articles, funding announcements, job postings, company blogs, product launches). If you are not certain a company exists and matches these criteria, do not include it.
 
 HALLUCINATION RULES — violations make the entire output useless:
 - Do NOT invent company names that sound plausible but you have not actually seen in sources
@@ -136,24 +140,24 @@ HALLUCINATION RULES — violations make the entire output useless:
 - Do NOT include a company if your confidence it exists and fits is below 90%
 - It is far better to return 8 real companies than 20 where several are hallucinated
 
-For each company ask yourself: "Have I actually seen this company mentioned in real sources? Can I name the specific thing that happened — a funding announcement, a product launch, a press release?" If the answer is no, skip it.
+For each company ask yourself: "Have I actually seen this company mentioned in real sources? Can I name a specific GPU-heavy workload they run and a specific reason cost or throughput would hurt them?" If not, skip it.
 
 Return up to ${count} qualified leads (fewer is fine if you cannot reach ${count} with high confidence). Return ONLY a JSON array, no markdown:
 [
   {
     "company_name": "string — a real company you have seen in public sources",
     "website_url": "https://... — only include if you are confident of the actual domain. Leave empty string if unsure.",
-    "description": "one sentence what they do",
-    "signal": "the specific real event you know about — name the source type (e.g. 'TechCrunch article April 2024', 'job posting on LinkedIn', 'founder tweet'). Do not fabricate signals.",
-    "use_case": "payments" | "yield" | "treasury" | "tokenization",
+    "description": "one sentence on what they build",
+    "signal": "the specific real thing that makes them a fit — name the workload and source type (e.g. 'processes 1B+ pages/yr per their pricing page', 'job posting for inference infra engineer', 'founder blog on eval costs'). Do not fabricate signals.",
+    "use_case": "evals" | "synth_data" | "agents" | "docs" | "media" | "batch",
     "tier": 1 | 2,
     "company_size": "only include if you have actually seen this figure. Leave blank if unknown.",
     "funding": "only include if you have seen this figure in a real source. Leave blank if unknown.",
-    "why_boundless_fits": "2-3 sentences: name the specific Boundless service, describe where it plugs into their stack, and what exposure problem it solves for them",
+    "why_boundless_fits": "2-3 sentences: name the specific recurring GPU workload they run, why it is throughput/cost-bound rather than latency-critical, and where Boundless capacity would plug in",
     "contacts": [
       {
         "name": "only include people you have seen publicly named as founders or executives at this company",
-        "title": "their actual known title",
+        "title": "their actual known title — prefer founder, CTO, infra/ML-platform lead, or eval lead",
         "linkedin_url": "LinkedIn people search URL: https://www.linkedin.com/search/results/people/?keywords=FirstName+LastName+CompanyName",
         "twitter_url": "https://x.com/handle — only if you have seen this handle publicly. Empty string if unsure."
       }

@@ -3,13 +3,7 @@
 import { useState, useEffect } from 'react'
 import OutreachModal from '@/components/OutreachModal'
 import type { LeadWithContacts } from '@/lib/types'
-
-const USE_CASE_COLOR: Record<string, string> = {
-  payments: 'bg-blue-50 text-blue-700',
-  yield: 'bg-emerald-50 text-emerald-700',
-  treasury: 'bg-violet-50 text-violet-700',
-  tokenization: 'bg-amber-50 text-amber-700',
-}
+import { WORKLOADS } from '@/lib/workloads'
 
 export default function QueuePage() {
   const [leads, setLeads] = useState<LeadWithContacts[]>([])
@@ -54,7 +48,7 @@ ${lead.description}
 
 ### Inferred priorities
 
-### How Boundless fits
+### Why it fits
 ${lead.why_boundless_fits}
 
 ---
@@ -127,10 +121,10 @@ ${lead.why_boundless_fits}
                 </div>
                 <span
                   className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
-                    USE_CASE_COLOR[lead.use_case] ?? 'bg-gray-100 text-gray-600'
+                    WORKLOADS[lead.use_case]?.chip ?? 'bg-gray-100 text-gray-600'
                   }`}
                 >
-                  {lead.use_case}
+                  {WORKLOADS[lead.use_case]?.label ?? lead.use_case}
                 </span>
               </div>
 

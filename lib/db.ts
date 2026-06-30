@@ -11,7 +11,7 @@ export async function setupDatabase() {
       website_url TEXT DEFAULT '',
       description TEXT DEFAULT '',
       signal TEXT DEFAULT '',
-      use_case TEXT NOT NULL DEFAULT 'payments',
+      use_case TEXT NOT NULL DEFAULT 'batch',
       tier INTEGER NOT NULL DEFAULT 2,
       company_size TEXT DEFAULT '',
       funding TEXT DEFAULT '',
@@ -90,7 +90,7 @@ export async function setupDatabase() {
     )
   `
 
-  const useCases = ['payments', 'yield', 'treasury', 'tokenization']
+  const useCases = ['evals', 'synth_data', 'agents', 'docs', 'media', 'batch']
   for (const uc of useCases) {
     for (const tier of [1, 2]) {
       await sql`
@@ -403,4 +403,28 @@ export async function deletePendingLeads(): Promise<number> {
     RETURNING id
   `
   return rows.length
+}
+
+// Hard reset: clears every lead (contacts + outreach cascade), the learned
+// swipe patterns, AI insights, and search refinements, then reseeds the empty
+// pattern grid for the current workload taxonomy. Used when repointing the tool
+// at a new product/ICP. Returns the number of leads removed.
+export async function wipeDatabase(): Promise<number> {
+  await setupDatabase()
+  const removed = await sql`DELETE FROM leads RETURNING id`
+  await sql`DELETE FROM pattern_insights`
+  await sql`DELETE FROM search_refinements`
+  await sql`DELETE FROM swipe_patterns`
+
+  const useCases = ['evals', 'synth_data', 'agents', 'docs', 'media', 'batch']
+  for (const uc of useCases) {
+    for (const tier of [1, 2]) {
+      await sql`
+        INSERT INTO swipe_patterns (use_case, tier, right_swipes, left_swipes)
+        VALUES (${uc}, ${tier}, 0, 0)
+        ON CONFLICT (use_case, tier) DO NOTHING
+      `
+    }
+  }
+  return removed.length
 }

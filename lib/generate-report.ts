@@ -8,47 +8,44 @@ export async function generateReport(lead: Lead, contacts: Contact[]): Promise<s
     ? contacts.map((c) => `- ${c.name} (${c.title})${c.linkedin_url ? ` — ${c.linkedin_url}` : ''}`).join('\n')
     : '- No contacts on file'
 
-  const prompt = `You are preparing a call prep brief for a Boundless sales call. Boundless is compliance infrastructure for onchain finance — it lets institutions go onchain without exposing company data (confidential payments, yield, treasury, tokenization on public chains).
+  const prompt = `You are preparing a discovery-call prep brief for the Boundless team. Boundless runs a distributed GPU cloud for non-latency-critical AI workloads (batch inference, evals, synthetic data, document processing, agent runs, image/video on open and custom models). This is CUSTOMER DISCOVERY: the goal of the call is to learn how this team runs its workload and where cost, throughput, queue time, rate limits, or GPU availability hurt, not to pitch.
 
 COMPANY: ${lead.company_name}
 WEBSITE: ${lead.website_url || 'unknown'}
 DESCRIPTION: ${lead.description}
 QUALIFYING SIGNAL: ${lead.signal}
-PRIMARY USE CASE: ${lead.use_case}
+WORKLOAD TYPE: ${lead.use_case}
 COMPANY SIZE: ${lead.company_size || 'unknown'}
 FUNDING: ${lead.funding || 'unknown'}
-WHY BOUNDLESS FITS: ${lead.why_boundless_fits}
+WHY THEY FIT: ${lead.why_boundless_fits}
 
 KNOWN CONTACTS:
 ${contactLines}
 
-Generate a comprehensive call prep brief in clean markdown. Be specific and concrete — no filler. Cover each section below.
+Generate a comprehensive discovery-call prep brief in clean markdown. Be specific and concrete — no filler. Cover each section below.
 
 ---
 
 ## Company Overview
-What they actually build, their customer base (B2B, B2C, institutional), business model, key differentiators, and any notable traction or scale indicators.
+What they actually build, who their customers are, business model, and any notable traction or scale indicators.
 
-## Blockchain & Compliance Exposure
-Which chains/protocols they use or evaluate. Where public transaction visibility creates a problem for them or their clients. Regulatory jurisdictions they operate in (MiCA, FinCEN, FCA, MAS, etc.).
+## Their GPU Workload
+The specific recurring AI workloads they run (evals, synthetic data, agent runs, document processing, image/video, batch inference). What models and roughly what scale (pages, tokens, requests). Why it is throughput- and cost-bound rather than latency-critical.
+
+## Where It Hurts
+Where cost, throughput, queue time, rate limits, or GPU availability likely create pain today, given their scale and stage. Be concrete about which workload and why.
 
 ## Recent News & Signals (last 6 months)
-Funding rounds, product launches, key hires, partnerships, regulatory filings, executive posts. Flag anything that creates urgency for Boundless.
+Funding, product launches, key hires (especially infra / ML platform / eval roles), pricing changes, and any public writing about inference cost or scaling. Flag anything that makes the pain acute right now.
 
 ## Key People
-For each known contact and any other decision-makers likely involved in an infrastructure purchase: background, likely role in the buying decision (champion vs. economic buyer vs. blocker), and anything notable from public presence.
+For each known contact and any other likely decision-makers (founder, CTO, infra lead, ML platform lead, eval lead): background, likely role in an infra decision, and anything notable from public presence.
 
 ## Boundless Fit — Specific Mapping
-Map their exact product flow to the specific Boundless service (Boundless Payments / Yield / Treasury / Tokenization). Name the integration point (which API call, which transaction type, which user flow). Quantify the competitive exposure problem if possible.
+Map their exact workload to where Boundless capacity would plug in. Name the specific job (which pipeline, which batch/eval/async lane). Note any latency or privacy constraint that would keep part of the workload off external compute for now.
 
-## Likely Objections & Responses
-List the 3-4 most likely objections for this specific company (not generic ones). For each: the objection, why they'd raise it, and the 1-2 sentence response.
-
-## Call Strategy
-Recommended opening line. Key talking points in priority order. What to probe for in discovery. When/how to introduce Boundless specifically.
-
-## Discovery Questions
-10 sharp questions tailored to this company's specific situation. Mix: qualifying questions (budget, timeline, decision process) with technical/product questions (what they've evaluated, what's blocking them).`
+## Discovery Questions (Mom Test style)
+10 sharp, non-leading questions tailored to this company. Ask about how they run the workload today, what it costs them in time/money, what they have tried, and what is actually painful — not whether they would buy. Avoid pitching and avoid hypotheticals; anchor on their real current behavior.`
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',

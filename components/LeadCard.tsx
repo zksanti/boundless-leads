@@ -1,11 +1,5 @@
 import type { Lead } from '@/lib/types'
-
-const USE_CASE_CONFIG = {
-  payments: { label: 'Payments', color: 'bg-blue-50 text-blue-700 border-blue-100' },
-  yield: { label: 'Yield', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-  treasury: { label: 'Treasury', color: 'bg-violet-50 text-violet-700 border-violet-100' },
-  tokenization: { label: 'Tokenization', color: 'bg-amber-50 text-amber-700 border-amber-100' },
-}
+import { WORKLOADS } from '@/lib/workloads'
 
 interface Props {
   lead: Lead
@@ -13,7 +7,7 @@ interface Props {
 }
 
 export default function LeadCard({ lead, dimmed = false }: Props) {
-  const uc = USE_CASE_CONFIG[lead.use_case] ?? USE_CASE_CONFIG.payments
+  const uc = WORKLOADS[lead.use_case] ?? WORKLOADS.batch
 
   return (
     <div
@@ -25,7 +19,7 @@ export default function LeadCard({ lead, dimmed = false }: Props) {
       <div className="px-6 pt-6 pb-4">
         <div className="flex items-center justify-between mb-4">
           <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${uc.color}`}
+            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${uc.chip}`}
           >
             {uc.label}
           </span>
