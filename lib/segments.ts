@@ -47,7 +47,10 @@ export const SEGMENTS: Record<Segment, SegmentDef> = {
     exclude: [
       'Large neoclouds such as Nebius, CoreWeave, Lambda, and Crusoe',
       'Raw GPU-as-a-service platforms competing for the same customers as Boundless',
+      'Serverless GPU compute platforms (Beam, Modal, Replicate, Baseten profile) — their product IS GPU compute, so they are competitors, not buyers. A buyer’s product consumes GPU; it is not the GPU itself.',
+      'Companies acquired by or absorbed into larger companies (Together AI, CoreWeave, NVIDIA, etc. have been actively acquiring this profile)',
       'Companies requiring mature global SLAs or enterprise procurement',
+      'Defense, government, or geospatial-intelligence adjacent companies (security requirements the fleet cannot meet)',
       'Direct competitors with no reason to purchase outside capacity',
       'Companies with strict privacy needs, such as some medical, legal, and financial companies',
     ],
