@@ -69,7 +69,7 @@ async function vetLeads(leads: LeadRow[]): Promise<LeadRow[]> {
 
   const vetPrompt = `You are the quality gate for a customer-discovery lead list. For each company below, judge two things independently and skeptically:
 
-1. "real" — is this a real company you have actually seen in public sources (news, funding announcements, product launches)? false if unsure or possibly fabricated.
+1. "real" — is this a real company you have actually seen in public sources (news, funding announcements, product launches), AND to your knowledge still independent and operating (not acquired, not shut down, not absorbed into a larger company)? false if unsure, possibly fabricated, known to be acquired (e.g. by a cloud provider or enterprise), or known to have shut down.
 2. "fits" — does it credibly fit the ICP and its assigned segment? The ICP: Seed to Series B AI-native startups that run or assist in the serving or training of open or custom models and can deploy onto external GPU infrastructure. Segment qualifications:
 ${SEGMENT_KEYS.map((k) => `   - ${k}: ${SEGMENTS[k].researchQualification.join('; ')}. Excluded: ${SEGMENTS[k].exclude.join('; ')}`).join('\n')}
    false if the company is too large or too late-stage (well past Series B), is an excluded profile, relies primarily on closed model APIs, or the claimed fit is vague.

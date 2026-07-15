@@ -51,7 +51,9 @@ export const SEGMENTS: Record<Segment, SegmentDef> = {
       'Direct competitors with no reason to purchase outside capacity',
       'Companies with strict privacy needs, such as some medical, legal, and financial companies',
     ],
-    examples: ['Featherless AI', 'FinetuneDB'],
+    // FinetuneDB (the doc's original example) was acquired by Opper in Sept 2025
+    // and is being sunset — replaced with verified-independent profiles.
+    examples: ['Featherless AI', 'Reducto', 'Refuel AI'],
     signals: [
       'Launching support for a new model or workload',
       'Introducing managed fine-tuning or hosted inference',
