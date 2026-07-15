@@ -1,6 +1,11 @@
 // Workload segments for the inference-cloud ICP. The DB column is still named
 // `use_case` for migration simplicity, but it now carries the GPU-workload type.
 export type UseCase = 'evals' | 'synth_data' | 'agents' | 'docs' | 'media' | 'batch'
+
+// Discovery segments from the Customer Discovery Experiment (July 2026).
+// Orthogonal to UseCase: segment = who the company is, use_case = what they run.
+// '' on a lead means it predates the experiment and is unassigned.
+export type Segment = 'platforms' | 'media_gen' | 'agents_pt'
 export type Tier = 1 | 2
 export type SwipeDirection = 'right' | 'left' | 'down'
 export type LeadStatus = 'pending' | 'accepted' | 'rejected' | 'snoozed'
@@ -26,6 +31,8 @@ export interface Lead {
   description: string
   signal: string
   use_case: UseCase
+  segment: Segment | ''
+  company_linkedin_url: string
   tier: Tier
   company_size: string
   funding: string
@@ -64,6 +71,7 @@ export interface Contact {
   lead_id: string
   name: string
   title: string
+  email: string
   linkedin_url: string
   twitter_url: string
   is_primary: boolean
@@ -80,7 +88,7 @@ export interface Outreach {
   id: string
   lead_id: string
   contact_id: string | null
-  type: 'linkedin_connection' | 'linkedin_dm' | 'email' | 'research_report' | 'sent_message'
+  type: 'linkedin_connection' | 'linkedin_dm' | 'email' | 'x_dm' | 'research_report' | 'sent_message'
   content: string
   generated_at: string
 }

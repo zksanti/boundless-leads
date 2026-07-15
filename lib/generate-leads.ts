@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { setupDatabase, getPatterns, getExistingCompanyNames, getActiveRefinements, insertLead, insertContact } from './db'
-import type { Pattern } from './types'
+import type { Pattern, Segment } from './types'
+import { SEGMENTS, SEGMENT_KEYS } from './segments'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -32,53 +33,74 @@ function buildPatternContext(patterns: Pattern[]): string {
   return `\nUSER APPROVAL HISTORY — weight these in your selection:\n${lines.join('\n')}\n`
 }
 
+function buildSegmentBlock(key: Segment): string {
+  const s = SEGMENTS[key]
+  return `SEGMENT "${key}" — ${s.label}
+${s.description}
+Qualification (a lead must plausibly meet these):
+${s.researchQualification.map((q) => `- ${q}`).join('\n')}
+Exclude:
+${s.exclude.map((e) => `- ${e}`).join('\n')}
+Known-good examples of the profile (do NOT return these; they calibrate the search): ${s.examples.join(', ')}
+High-signal triggers: ${s.signals.join('; ')}`
+}
+
 type LeadRow = {
   company_name: string
   website_url: string
+  company_linkedin_url?: string
   description: string
   signal: string
   use_case: string
+  segment?: string
   tier: number
   company_size: string
   funding: string
   why_boundless_fits: string
-  contacts?: Array<{ name: string; title: string; linkedin_url: string; twitter_url: string }>
+  contacts?: Array<{ name: string; title: string; email?: string; linkedin_url: string; twitter_url: string }>
 }
 
-async function verifyLeads(leads: LeadRow[]): Promise<LeadRow[]> {
+// Second-pass gate between model output and the deck: every lead must be a
+// real company AND actually fit the ICP + its segment qualification. Only
+// leads that pass both reach the swipe deck — swipes confirm the ICP, they
+// don't enforce it.
+async function vetLeads(leads: LeadRow[]): Promise<LeadRow[]> {
   if (leads.length === 0) return leads
 
-  const names = leads.map((l) => l.company_name)
+  const vetPrompt = `You are the quality gate for a customer-discovery lead list. For each company below, judge two things independently and skeptically:
 
-  const verifyPrompt = `You are a fact-checker reviewing a list of company names. For each company, answer honestly: is this a real company you have actually seen in public sources (news, funding announcements, product launches)? Or does it sound like a plausible name that may have been fabricated?
+1. "real" — is this a real company you have actually seen in public sources (news, funding announcements, product launches)? false if unsure or possibly fabricated.
+2. "fits" — does it credibly fit the ICP and its assigned segment? The ICP: Seed to Series B AI-native startups that run or assist in the serving or training of open or custom models and can deploy onto external GPU infrastructure. Segment qualifications:
+${SEGMENT_KEYS.map((k) => `   - ${k}: ${SEGMENTS[k].researchQualification.join('; ')}. Excluded: ${SEGMENTS[k].exclude.join('; ')}`).join('\n')}
+   false if the company is too large or too late-stage (well past Series B), is an excluded profile, relies primarily on closed model APIs, or the claimed fit is vague.
 
-Companies to check:
-${names.map((n, i) => `${i + 1}. ${n}`).join('\n')}
+Companies:
+${leads.map((l, i) => `${i + 1}. ${l.company_name} [segment: ${l.segment || 'unknown'}] — ${l.description || 'no description'} | signal: ${l.signal || 'NONE'} | fit: ${l.why_boundless_fits || 'NONE'}`).join('\n')}
 
-Return ONLY a JSON array of booleans — true if the company is real and you are confident, false if you are unsure or it may be hallucinated. One boolean per company, in the same order. Example: [true, false, true, true]`
+Return ONLY a JSON array, one object per company in the same order: [{"real": true, "fits": false}, ...]`
 
   try {
     const res = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 200,
-      messages: [{ role: 'user', content: verifyPrompt }],
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: vetPrompt }],
     })
     const firstBlock = res.content[0]
     if (firstBlock.type !== 'text') return leads
     const text = firstBlock.text.trim()
     const jsonStr = text.startsWith('[') ? text : (text.match(/\[[\s\S]*\]/) ?? ['[]'])[0]
-    const verified: boolean[] = JSON.parse(jsonStr)
-    const filtered = leads.filter((_, i) => verified[i] !== false)
+    const verdicts: Array<{ real?: boolean; fits?: boolean }> = JSON.parse(jsonStr)
+    const filtered = leads.filter((_, i) => verdicts[i]?.real !== false && verdicts[i]?.fits !== false)
     const removed = leads.length - filtered.length
-    if (removed > 0) console.log(`generate-leads: verification removed ${removed} potentially hallucinated companies`)
+    if (removed > 0) console.log(`generate-leads: vetting removed ${removed} leads (hallucinated or off-ICP)`)
     return filtered
   } catch (e) {
-    console.warn('generate-leads: verification pass failed, using unfiltered list', e)
+    console.warn('generate-leads: vetting pass failed, using unfiltered list', e)
     return leads
   }
 }
 
-export async function generateLeads(count = 20): Promise<number> {
+export async function generateLeads(count = 20, segment?: Segment): Promise<number> {
   // Always ensure schema is current — idempotent, safe to call every time
   await setupDatabase()
 
@@ -95,36 +117,34 @@ export async function generateLeads(count = 20): Promise<number> {
     ...existingNames,
   ]
 
-  const prompt = `You are a customer-discovery researcher for Boundless, which runs a distributed GPU cloud for large-scale, non-latency-critical AI workloads.
+  const targetSegments = segment ? [segment] : SEGMENT_KEYS
+  const distribution = segment
+    ? `All leads must belong to segment "${segment}".`
+    : `Distribute leads roughly evenly across the three segments (about ${Math.ceil(count / 3)} each). If one segment cannot be filled with high confidence, return fewer for that segment rather than stretching the qualification.`
 
-BOUNDLESS CONTEXT:
-What it is: a distributed GPU cloud built for throughput- and cost-bound AI workloads, not latency-bound ones.
-What it runs well today: async and batch inference, eval suites, synthetic data generation, document processing, agent runs, and image/video generation on open and custom models (roughly 8B-70B class).
-In scope: workloads that tolerate a queue and low-ish latency (around 500ms time-to-first-token is fine), where cost and throughput matter more than tail latency.
-We are doing CUSTOMER DISCOVERY. The goal is to find teams who feel this pain TODAY so we can learn from them, not to close deals.
+  const prompt = `You are a customer-discovery researcher for Boundless. Boundless provides GPUs to companies running AI workloads, such as inference, training, evals, and more. Customers bring their existing model, container, serving, or training stack; Boundless provides the GPU capacity.
 
-ICP — THE FIVE PILLARS (a strong lead clears most of these):
-1. Runs recurring GPU-heavy workloads: eval suites, release gates, synthetic data, agent runs, document processing, or video/image generation.
-2. Feels real pain right now around cost, throughput, queue time, rate limits, or GPU availability.
-3. Workload does NOT need ultra-low latency. Low-ish latency, async, and batch jobs are all in scope (~500ms TTFT is fine).
-4. The buyer is reachable and pragmatic: founder, CTO, infra lead, ML platform lead, eval lead, or workflow owner at a seed through Series-B-ish team.
-5. No hard privacy/compliance blocker that prevents testing external compute right now (this typically excludes healthcare, finance, and large corps — support comes later).
+We are running a CUSTOMER DISCOVERY EXPERIMENT across three specific segments. The goal is to find teams with a meaningful infrastructure cost or capacity problem so we can learn from them and prove an economic advantage, not to close deals at scale.
 
-TIER 1 (prioritize): clears all five pillars, with a clearly named recurring GPU workload and an obvious cost/throughput pain.
-TIER 2: plausible fit but one pillar is soft (e.g. latency needs are borderline, or the buyer is harder to reach).
+ICP (applies to every segment):
+Seed to Series B AI-native startups that run or assist in the serving or training of open or custom models, and can deploy their workloads onto external GPU infrastructure (no strict data-sensitivity blockers).
+A priority account has 1 or more of:
+- Production or recurring GPU demand
+- A visible cost or capacity constraint
+- Control over their model and infrastructure stack
 
-HIGH-SIGNAL INDICATORS:
-- Public writing/benchmarks about inference cost, GPU spend, or scaling a batch/eval pipeline
-- Hiring ML platform / inference infra / eval roles
-- Pricing with per-page / per-token / volume tiers (implies high-volume background inference)
-- Founder or infra lead posting about GPU availability, rate limits, or cost
-- Recently raised and scaling a compute-heavy product
+THE THREE SEGMENTS:
 
-DISQUALIFY:
-- Hard privacy/compliance blocker (healthcare, finance, regulated enterprise, government)
-- Latency-critical only (real-time chat, sub-second consumer-facing inference) with no async/batch workload
-- Large incumbents with locked-in cloud commitments
-- Pre-product / no real workload yet
+${targetSegments.map(buildSegmentBlock).join('\n\n')}
+
+${distribution}
+
+TIER 1 (prioritize): clearly meets the segment qualification with a named recurring GPU workload and a visible cost/capacity constraint.
+TIER 2: plausible fit but one qualification is soft.
+
+CONTACT PRIORITY — this matters as much as the company selection:
+For each company, work hard to surface the actual people: founders, CTO, head of infrastructure, ML platform lead. For each person include their name, title, a LinkedIn people-search URL, an X handle if publicly known, and a work email ONLY if it has been published somewhere public (a blog, GitHub, conference page, personal site). NEVER guess or construct email addresses from name patterns; leave the field empty if not publicly known.
+If you cannot name any real person for a company, still include the company but make sure website_url and company_linkedin_url are filled in so the team can find contacts manually. A lead with neither named contacts nor a company LinkedIn URL is worth much less.
 
 DO NOT INCLUDE (already contacted or excluded):
 ${excluded.join(', ')}
@@ -136,28 +156,33 @@ You are RECALLING real companies from your training data, not inventing companie
 HALLUCINATION RULES — violations make the entire output useless:
 - Do NOT invent company names that sound plausible but you have not actually seen in sources
 - Do NOT fabricate funding amounts, employee counts, or signals — leave fields blank if unknown
-- Do NOT guess contact names — only include people you have seen publicly associated with the company (founders named in press, executives in interviews, etc.)
+- Do NOT guess contact names or emails — only include people and addresses you have seen publicly associated with the company
 - Do NOT include a company if your confidence it exists and fits is below 90%
-- It is far better to return 8 real companies than 20 where several are hallucinated
+- If a company fails the ICP or its segment qualification (too large, too late-stage, closed-API-only, excluded profile), OMIT it entirely. NEVER include it with a disclaimer or a note in the description. Every card shown to the user must already match the ICP; the swipe confirms fit, it does not filter misfits.
+- Every lead MUST have a non-empty, specific signal and why_boundless_fits. If you cannot state either, the lead does not go on the list.
+- It is far better to return 8 real companies than 20 where several are hallucinated or off-ICP
 
-For each company ask yourself: "Have I actually seen this company mentioned in real sources? Can I name a specific GPU-heavy workload they run and a specific reason cost or throughput would hurt them?" If not, skip it.
+For each company ask yourself: "Have I actually seen this company mentioned in real sources? Can I name a specific GPU-heavy workload they run and a specific reason cost or capacity would hurt them?" If not, skip it.
 
 Return up to ${count} qualified leads (fewer is fine if you cannot reach ${count} with high confidence). Return ONLY a JSON array, no markdown:
 [
   {
     "company_name": "string — a real company you have seen in public sources",
     "website_url": "https://... — only include if you are confident of the actual domain. Leave empty string if unsure.",
+    "company_linkedin_url": "https://www.linkedin.com/company/<slug> — only if you are confident of the actual company page slug. Leave empty string if unsure.",
     "description": "one sentence on what they build",
-    "signal": "the specific real thing that makes them a fit — name the workload and source type (e.g. 'processes 1B+ pages/yr per their pricing page', 'job posting for inference infra engineer', 'founder blog on eval costs'). Do not fabricate signals.",
+    "signal": "the specific real thing that makes them a fit — name the workload and source type (e.g. 'launched batch API per changelog', 'job posting for inference infra engineer', 'founder post on GPU costs'). Do not fabricate signals.",
     "use_case": "evals" | "synth_data" | "agents" | "docs" | "media" | "batch",
+    "segment": ${targetSegments.map((s) => `"${s}"`).join(' | ')},
     "tier": 1 | 2,
     "company_size": "only include if you have actually seen this figure. Leave blank if unknown.",
     "funding": "only include if you have seen this figure in a real source. Leave blank if unknown.",
-    "why_boundless_fits": "2-3 sentences: name the specific recurring GPU workload they run, why it is throughput/cost-bound rather than latency-critical, and where Boundless capacity would plug in",
+    "why_boundless_fits": "2-3 sentences: name the specific recurring GPU workload they run, why it fits this segment's product hypothesis, and where Boundless capacity would plug in",
     "contacts": [
       {
-        "name": "only include people you have seen publicly named as founders or executives at this company",
-        "title": "their actual known title — prefer founder, CTO, infra/ML-platform lead, or eval lead",
+        "name": "only people you have seen publicly named as founders or executives at this company",
+        "title": "their actual known title — prefer founder, CTO, infra/ML-platform lead",
+        "email": "work email ONLY if published publicly. Empty string otherwise. Never constructed.",
         "linkedin_url": "LinkedIn people search URL: https://www.linkedin.com/search/results/people/?keywords=FirstName+LastName+CompanyName",
         "twitter_url": "https://x.com/handle — only if you have seen this handle publicly. Empty string if unsure."
       }
@@ -167,7 +192,7 @@ Return up to ${count} qualified leads (fewer is fine if you cannot reach ${count
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 10000,
+    max_tokens: 12000,
     messages: [{ role: 'user', content: prompt }],
   })
 
@@ -193,8 +218,18 @@ Return up to ${count} qualified leads (fewer is fine if you cannot reach ${count
     return 0
   }
 
-  // Verification pass — ask Claude to flag any hallucinated companies before saving
-  leads = await verifyLeads(leads)
+  // Deterministic gate: a lead the model could not give a concrete signal and
+  // fit rationale for is not presentable, regardless of what else it wrote.
+  const beforeFieldGate = leads.length
+  leads = leads.filter((l) => l.signal?.trim() && l.why_boundless_fits?.trim())
+  if (leads.length < beforeFieldGate) {
+    console.log(`generate-leads: dropped ${beforeFieldGate - leads.length} leads with empty signal or fit rationale`)
+  }
+
+  // Vetting pass — real company AND on-ICP, or it never reaches the deck
+  leads = await vetLeads(leads)
+
+  const validSegments = new Set<string>(SEGMENT_KEYS)
 
   let inserted = 0
   for (const lead of leads) {
@@ -203,9 +238,11 @@ Return up to ${count} qualified leads (fewer is fine if you cannot reach ${count
     const saved = await insertLead({
       company_name: lead.company_name,
       website_url: lead.website_url || '',
+      company_linkedin_url: lead.company_linkedin_url || '',
       description: lead.description || '',
       signal: lead.signal || '',
       use_case: lead.use_case,
+      segment: validSegments.has(lead.segment ?? '') ? lead.segment : (segment ?? ''),
       tier: lead.tier || 2,
       company_size: lead.company_size || '',
       funding: lead.funding || '',
@@ -221,6 +258,7 @@ Return up to ${count} qualified leads (fewer is fine if you cannot reach ${count
             lead_id: saved.id,
             name: c.name,
             title: c.title || '',
+            email: c.email || '',
             linkedin_url: c.linkedin_url || '',
             twitter_url: c.twitter_url || '',
             is_primary: i === 0,

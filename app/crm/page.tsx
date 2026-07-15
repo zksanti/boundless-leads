@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import OutreachModal from '@/components/OutreachModal'
-import type { LeadWithContacts, CRMStage, UseCase, OutreachChannel } from '@/lib/types'
+import type { LeadWithContacts, CRMStage, UseCase, OutreachChannel, Segment } from '@/lib/types'
 import { WORKLOADS, WORKLOAD_KEYS } from '@/lib/workloads'
+import { SEGMENTS, SEGMENT_KEYS } from '@/lib/segments'
 
 const CHANNEL_CONFIG: Record<OutreachChannel, { label: string; badge: string }> = {
   linkedin: { label: 'LinkedIn', badge: 'bg-blue-50 text-blue-700' },
@@ -41,7 +42,7 @@ import type { Contact } from '@/lib/types'
 
 function EditableContact({ contact, onSaved }: { contact: Contact; onSaved: (c: Contact) => void }) {
   const [editing, setEditing] = useState(false)
-  const [fields, setFields] = useState({ name: contact.name, title: contact.title, linkedin_url: contact.linkedin_url, twitter_url: contact.twitter_url })
+  const [fields, setFields] = useState({ name: contact.name, title: contact.title, email: contact.email, linkedin_url: contact.linkedin_url, twitter_url: contact.twitter_url })
   const [saving, setSaving] = useState(false)
 
   const save = async () => {
@@ -63,7 +64,7 @@ function EditableContact({ contact, onSaved }: { contact: Contact; onSaved: (c: 
   }
 
   const cancel = () => {
-    setFields({ name: contact.name, title: contact.title, linkedin_url: contact.linkedin_url, twitter_url: contact.twitter_url })
+    setFields({ name: contact.name, title: contact.title, email: contact.email, linkedin_url: contact.linkedin_url, twitter_url: contact.twitter_url })
     setEditing(false)
   }
 
@@ -74,6 +75,8 @@ function EditableContact({ contact, onSaved }: { contact: Contact; onSaved: (c: 
           placeholder="Name" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
         <input value={fields.title} onChange={(e) => setFields(f => ({ ...f, title: e.target.value }))}
           placeholder="Title" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
+        <input value={fields.email} onChange={(e) => setFields(f => ({ ...f, email: e.target.value }))}
+          placeholder="Email" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
         <input value={fields.linkedin_url} onChange={(e) => setFields(f => ({ ...f, linkedin_url: e.target.value }))}
           placeholder="LinkedIn URL" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
         <input value={fields.twitter_url} onChange={(e) => setFields(f => ({ ...f, twitter_url: e.target.value }))}
@@ -91,9 +94,12 @@ function EditableContact({ contact, onSaved }: { contact: Contact; onSaved: (c: 
 
   return (
     <div className="flex items-center justify-between">
-      <div>
+      <div className="min-w-0">
         <p className="text-sm font-medium text-gray-900">{contact.name}</p>
         <p className="text-xs text-gray-400">{contact.title}</p>
+        {contact.email && (
+          <a href={`mailto:${contact.email}`} className="text-xs text-blue-600 hover:underline truncate block">{contact.email}</a>
+        )}
       </div>
       <div className="flex items-center gap-2">
         {contact.linkedin_url && (
@@ -149,6 +155,35 @@ const ALL_STAGES: CRMStage[] = [
   ...BOARD_STAGES, 'nurture', 'closed_won', 'closed_lost',
 ]
 
+// Experiment progress per segment (Customer Discovery Experiment doc):
+// a promising segment produces >=3 substantive replies, >=2 discovery
+// conversations, and >=1 accepted benchmark from 15-20 researched accounts.
+const REPLY_STAGES: CRMStage[]     = ['replied', 'call_scheduled', 'post_call', 'in_evaluation', 'proposal_sent', 'closed_won']
+const CALL_STAGES: CRMStage[]      = ['call_scheduled', 'post_call', 'in_evaluation', 'proposal_sent', 'closed_won']
+const BENCHMARK_STAGES: CRMStage[] = ['in_evaluation', 'proposal_sent', 'closed_won']
+
+function SegmentProgress({ leads }: { leads: LeadWithContacts[] }) {
+  const replies    = leads.filter((l) => REPLY_STAGES.includes(l.crm_stage)).length
+  const calls      = leads.filter((l) => CALL_STAGES.includes(l.crm_stage)).length
+  const benchmarks = leads.filter((l) => BENCHMARK_STAGES.includes(l.crm_stage)).length
+
+  const stat = (label: string, value: number, target: number) => (
+    <span className={`text-xs font-medium tabular-nums ${value >= target ? 'text-emerald-600' : 'text-gray-400'}`}>
+      {label} {value}/{target}
+    </span>
+  )
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-gray-400 tabular-nums">{leads.length} accounts</span>
+      <span className="text-gray-200">|</span>
+      {stat('Replies', replies, 3)}
+      {stat('Calls', calls, 2)}
+      {stat('Benchmarks', benchmarks, 1)}
+    </div>
+  )
+}
+
 
 function buildCalendarUrl(name: string) {
   const text = encodeURIComponent(`Boundless / ${name}`)
@@ -190,11 +225,18 @@ function TicketCard({
           : 'bg-white border-gray-200 hover:border-gray-300'
       }`}
     >
-      {/* Category + priority + channel/tier */}
+      {/* Segment + category + priority + channel/tier */}
       <div className="flex items-center justify-between mb-2.5">
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${WORKLOADS[lead.use_case]?.chip ?? 'bg-gray-100 text-gray-600'}`}>
-          {WORKLOADS[lead.use_case]?.label ?? lead.use_case}
-        </span>
+        <div className="flex items-center gap-1 min-w-0">
+          {lead.segment && SEGMENTS[lead.segment as Segment] && (
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold border flex-shrink-0 ${SEGMENTS[lead.segment as Segment].chip}`}>
+              {SEGMENTS[lead.segment as Segment].short}
+            </span>
+          )}
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium truncate ${WORKLOADS[lead.use_case]?.chip ?? 'bg-gray-100 text-gray-600'}`}>
+            {WORKLOADS[lead.use_case]?.label ?? lead.use_case}
+          </span>
+        </div>
         <div className="flex items-center gap-1.5">
           <button
             onClick={onTogglePriority}
@@ -239,7 +281,7 @@ function TicketCard({
 }
 
 function AddContactForm({ leadId, onSaved, onCancel }: { leadId: string; onSaved: (c: Contact) => void; onCancel: () => void }) {
-  const [fields, setFields] = useState({ name: '', title: '', linkedin_url: '', twitter_url: '' })
+  const [fields, setFields] = useState({ name: '', title: '', email: '', linkedin_url: '', twitter_url: '' })
   const [saving, setSaving] = useState(false)
 
   const save = async () => {
@@ -266,6 +308,8 @@ function AddContactForm({ leadId, onSaved, onCancel }: { leadId: string; onSaved
         placeholder="Name *" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
       <input value={fields.title} onChange={(e) => setFields(f => ({ ...f, title: e.target.value }))}
         placeholder="Title" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
+      <input value={fields.email} onChange={(e) => setFields(f => ({ ...f, email: e.target.value }))}
+        placeholder="Email" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
       <input value={fields.linkedin_url} onChange={(e) => setFields(f => ({ ...f, linkedin_url: e.target.value }))}
         placeholder="LinkedIn URL" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
       <input value={fields.twitter_url} onChange={(e) => setFields(f => ({ ...f, twitter_url: e.target.value }))}
@@ -350,6 +394,159 @@ function BoardColumn({
   )
 }
 
+// ─── Add company modal ─────────────────────────────────────────────────────────
+
+function AddCompanyModal({
+  segment,
+  onAdded,
+  onClose,
+}: {
+  segment: Segment
+  onAdded: (lead: LeadWithContacts) => void
+  onClose: () => void
+}) {
+  const [fields, setFields] = useState({
+    company_name: '', website_url: '', company_linkedin_url: '',
+    description: '', signal: '', why_boundless_fits: '',
+    company_size: '', funding: '',
+    use_case: 'batch' as UseCase, segment, tier: 1,
+    contact_name: '', contact_title: '', contact_email: '', contact_linkedin: '',
+  })
+  const [saving, setSaving] = useState(false)
+  const set = (k: string, v: string | number) => setFields((f) => ({ ...f, [k]: v }))
+
+  const save = async () => {
+    if (!fields.company_name.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_name: fields.company_name,
+          website_url: fields.website_url,
+          company_linkedin_url: fields.company_linkedin_url,
+          description: fields.description,
+          signal: fields.signal,
+          why_boundless_fits: fields.why_boundless_fits,
+          company_size: fields.company_size,
+          funding: fields.funding,
+          use_case: fields.use_case,
+          segment: fields.segment,
+          tier: fields.tier,
+          contact: fields.contact_name.trim()
+            ? { name: fields.contact_name, title: fields.contact_title, email: fields.contact_email, linkedin_url: fields.contact_linkedin }
+            : null,
+        }),
+      })
+      if (res.ok) {
+        const { lead } = await res.json()
+        onAdded(lead)
+        onClose()
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const input = 'text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full'
+  const label = 'text-xs font-semibold text-gray-400 uppercase tracking-wide'
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/50 p-6 pt-12 overflow-y-auto"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">Add company</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+
+        <div className="px-6 py-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
+          {/* Segment + workload + tier */}
+          <div className="flex flex-col gap-2">
+            <span className={label}>Segment</span>
+            <div className="flex gap-1.5 flex-wrap">
+              {SEGMENT_KEYS.map((s) => (
+                <button key={s} onClick={() => set('segment', s)}
+                  className={`text-xs px-2.5 py-1 rounded-lg font-medium border transition-colors ${
+                    fields.segment === s ? SEGMENTS[s].chip + ' ring-1 ring-inset ring-current' : 'bg-gray-100 text-gray-400 border-transparent hover:text-gray-600'
+                  }`}>
+                  {SEGMENTS[s].short}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <div className="flex-1 flex flex-col gap-1.5">
+              <span className={label}>Workload</span>
+              <select value={fields.use_case} onChange={(e) => set('use_case', e.target.value)} className={input + ' cursor-pointer'}>
+                {WORKLOAD_KEYS.map((w) => <option key={w} value={w}>{WORKLOADS[w].label}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className={label}>Tier</span>
+              <div className="flex gap-1.5">
+                {[1, 2].map((t) => (
+                  <button key={t} onClick={() => set('tier', t)}
+                    className={`text-xs px-3 py-2 rounded-lg font-medium transition-colors ${
+                      fields.tier === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-400 hover:text-gray-600'
+                    }`}>
+                    T{t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Company */}
+          <div className="flex flex-col gap-2">
+            <span className={label}>Company</span>
+            <input value={fields.company_name} onChange={(e) => set('company_name', e.target.value)} placeholder="Company name *" className={input} />
+            <input value={fields.website_url} onChange={(e) => set('website_url', e.target.value)} placeholder="Website URL" className={input} />
+            <input value={fields.company_linkedin_url} onChange={(e) => set('company_linkedin_url', e.target.value)} placeholder="Company LinkedIn URL" className={input} />
+            <div className="flex gap-2">
+              <input value={fields.company_size} onChange={(e) => set('company_size', e.target.value)} placeholder="Size (e.g. 5-15)" className={input} />
+              <input value={fields.funding} onChange={(e) => set('funding', e.target.value)} placeholder="Funding (e.g. Seed, $4M)" className={input} />
+            </div>
+            <textarea value={fields.description} onChange={(e) => set('description', e.target.value)} placeholder="One sentence on what they build" rows={2} className={input + ' resize-none'} />
+          </div>
+
+          {/* Qualification */}
+          <div className="flex flex-col gap-2">
+            <span className={label}>Qualification</span>
+            <textarea value={fields.signal} onChange={(e) => set('signal', e.target.value)} placeholder="Signal — the specific thing that makes them a fit right now" rows={2} className={input + ' resize-none'} />
+            <textarea value={fields.why_boundless_fits} onChange={(e) => set('why_boundless_fits', e.target.value)} placeholder="Why Boundless fits — workload, why it's cost/capacity-bound, where we plug in" rows={3} className={input + ' resize-none'} />
+          </div>
+
+          {/* Primary contact (optional) */}
+          <div className="flex flex-col gap-2">
+            <span className={label}>Primary contact (optional)</span>
+            <div className="flex gap-2">
+              <input value={fields.contact_name} onChange={(e) => set('contact_name', e.target.value)} placeholder="Name" className={input} />
+              <input value={fields.contact_title} onChange={(e) => set('contact_title', e.target.value)} placeholder="Title" className={input} />
+            </div>
+            <div className="flex gap-2">
+              <input value={fields.contact_email} onChange={(e) => set('contact_email', e.target.value)} placeholder="Email" className={input} />
+              <input value={fields.contact_linkedin} onChange={(e) => set('contact_linkedin', e.target.value)} placeholder="LinkedIn URL" className={input} />
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+          <button onClick={onClose} className="h-9 px-4 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancel</button>
+          <button onClick={save} disabled={saving || !fields.company_name.trim()}
+            className="h-9 px-4 text-sm font-medium bg-gray-900 text-white rounded-xl hover:bg-gray-800 disabled:opacity-40 transition-colors">
+            {saving ? 'Adding...' : 'Add to pipeline'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Report overlay ────────────────────────────────────────────────────────────
 
 function ReportOverlay({ content, onClose }: { content: string; onClose: () => void }) {
@@ -390,6 +587,7 @@ function LeadDrawer({
   onClose,
   onStageChange,
   onChannelChange,
+  onSegmentChange,
   onOpenOutreach,
   onReportGenerated,
   onSentMessageSaved,
@@ -400,6 +598,7 @@ function LeadDrawer({
   onClose: () => void
   onStageChange: (leadId: string, stage: CRMStage) => void
   onChannelChange: (leadId: string, channel: OutreachChannel) => void
+  onSegmentChange: (leadId: string, segment: Segment | '') => void
   onOpenOutreach: () => void
   onReportGenerated: (leadId: string, content: string) => void
   onSentMessageSaved: (leadId: string, content: string) => void
@@ -409,6 +608,7 @@ function LeadDrawer({
   const [stageSaving, setStageSaving] = useState(false)
   const [currentStage, setCurrentStage] = useState<CRMStage>(lead.crm_stage)
   const [currentChannel, setCurrentChannel] = useState<OutreachChannel | null>(lead.outreach_channel)
+  const [currentSegment, setCurrentSegment] = useState<Segment | ''>(lead.segment)
   const [generatingReport, setGeneratingReport] = useState(false)
   const [reportContent, setReportContent] = useState<string | null>(
     lead.outreach.find((o) => o.type === 'research_report')?.content ?? null
@@ -426,11 +626,22 @@ function LeadDrawer({
   useEffect(() => {
     setCurrentStage(lead.crm_stage)
     setCurrentChannel(lead.outreach_channel)
+    setCurrentSegment(lead.segment)
     setReportContent(lead.outreach.find((o) => o.type === 'research_report')?.content ?? null)
     setSentMessage(lead.outreach.find((o) => o.type === 'sent_message')?.content ?? '')
     setSentSaved(!!lead.outreach.find((o) => o.type === 'sent_message'))
     setShowReport(false)
-  }, [lead.id, lead.crm_stage, lead.outreach_channel, lead.outreach])
+  }, [lead.id, lead.crm_stage, lead.outreach_channel, lead.segment, lead.outreach])
+
+  const handleSegmentChange = async (segment: Segment | '') => {
+    setCurrentSegment(segment)
+    await fetch(`/api/leads/${lead.id}/segment`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ segment }),
+    })
+    onSegmentChange(lead.id, segment)
+  }
 
   const handleStageChange = async (stage: CRMStage) => {
     setStageSaving(true)
@@ -548,6 +759,26 @@ function LeadDrawer({
             </select>
           </div>
           {stageSaving && <div className="w-3.5 h-3.5 border border-gray-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />}
+        </div>
+
+        {/* Segment selector */}
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-shrink-0">Segment</span>
+          <div className="flex gap-1.5 flex-wrap">
+            {SEGMENT_KEYS.map((s) => (
+              <button
+                key={s}
+                onClick={() => handleSegmentChange(currentSegment === s ? '' : s)}
+                className={`text-xs px-2.5 py-1 rounded-lg font-medium border transition-colors ${
+                  currentSegment === s
+                    ? SEGMENTS[s].chip + ' ring-1 ring-inset ring-current'
+                    : 'bg-gray-100 text-gray-400 border-transparent hover:text-gray-600'
+                }`}
+              >
+                {SEGMENTS[s].short}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Channel selector — shown once stage is outreach_sent or beyond */}
@@ -710,6 +941,7 @@ export default function CRMPage() {
   const [outreachLead, setOutreachLead] = useState<LeadWithContacts | null>(null)
   const [showClosed, setShowClosed] = useState(false)
   const [serviceFilter, setServiceFilter] = useState<UseCase | 'all'>('all')
+  const [addToSegment, setAddToSegment] = useState<Segment | null>(null)
 
   useEffect(() => {
     fetch('/api/queue')
@@ -755,6 +987,15 @@ export default function CRMPage() {
     if (selectedLead?.id === leadId) setSelectedLead((prev) => prev ? { ...prev, outreach_channel: channel } : null)
   }
 
+  const handleSegmentChange = (leadId: string, segment: Segment | '') => {
+    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, segment } : l))
+    if (selectedLead?.id === leadId) setSelectedLead((prev) => prev ? { ...prev, segment } : null)
+  }
+
+  const handleCompanyAdded = (lead: LeadWithContacts) => {
+    setLeads((prev) => [lead, ...prev])
+  }
+
   const handleContactAdded = (leadId: string, contact: Contact) => {
     setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, contacts: [...l.contacts, contact] } : l))
     if (selectedLead?.id === leadId) {
@@ -797,12 +1038,23 @@ export default function CRMPage() {
 
   const visibleStages = showClosed ? ALL_STAGES : BOARD_STAGES
   const filteredLeads = serviceFilter === 'all' ? leads : leads.filter((l) => l.use_case === serviceFilter)
-  const leadsByStage: Record<CRMStage, LeadWithContacts[]> = {} as Record<CRMStage, LeadWithContacts[]>
-  for (const s of ALL_STAGES) leadsByStage[s] = []
-  for (const l of filteredLeads) {
-    // Priority leads float to top of their column
-    if (l.is_priority) leadsByStage[l.crm_stage]?.unshift(l)
-    else leadsByStage[l.crm_stage]?.push(l)
+
+  // Partition by segment, then by stage within each segment band.
+  // Leads that predate the experiment (segment = '') land in "Unassigned".
+  const bands: Array<{ key: Segment | ''; leads: LeadWithContacts[] }> = [
+    ...SEGMENT_KEYS.map((s) => ({ key: s as Segment | '', leads: filteredLeads.filter((l) => l.segment === s) })),
+    { key: '', leads: filteredLeads.filter((l) => !l.segment || !(SEGMENT_KEYS as string[]).includes(l.segment)) },
+  ]
+
+  const stagesFor = (bandLeads: LeadWithContacts[]): Record<CRMStage, LeadWithContacts[]> => {
+    const byStage = {} as Record<CRMStage, LeadWithContacts[]>
+    for (const s of ALL_STAGES) byStage[s] = []
+    for (const l of bandLeads) {
+      // Priority leads float to top of their column
+      if (l.is_priority) byStage[l.crm_stage]?.unshift(l)
+      else byStage[l.crm_stage]?.push(l)
+    }
+    return byStage
   }
 
   const closedCount = filteredLeads.filter((l) => ['nurture', 'closed_won', 'closed_lost'].includes(l.crm_stage)).length
@@ -815,31 +1067,21 @@ export default function CRMPage() {
     )
   }
 
-  if (leads.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
-        <p className="text-gray-500">No leads in pipeline yet.</p>
-        <p className="text-sm text-gray-400 mt-1">Swipe right on leads to add them here.</p>
-      </div>
-    )
-  }
-
-  const BOARD_H = 'calc(100vh - 56px)'
-  const COLUMN_H = 'calc(100vh - 130px)'
+  const COLUMN_H = 340
 
   return (
     <>
-      <div className="flex flex-col bg-gray-50" style={{ height: BOARD_H }}>
+      <div className="flex flex-col bg-gray-50 min-h-[calc(100vh-56px)]">
 
         {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white gap-4">
+        <div className="sticky top-0 z-30 flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white gap-4">
           <div className="flex-shrink-0">
             <h1 className="text-sm font-semibold text-gray-900">Pipeline</h1>
-            <p className="text-xs text-gray-400">{leads.length} companies</p>
+            <p className="text-xs text-gray-400">{leads.length} companies · 3 discovery segments</p>
           </div>
 
           {/* Service filter */}
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 flex-shrink-0 overflow-x-auto">
             {(['all', ...WORKLOAD_KEYS] as (UseCase | 'all')[]).map((f) => (
               <button
                 key={f}
@@ -863,24 +1105,63 @@ export default function CRMPage() {
           )}
         </div>
 
-        {/* Board — horizontal scroll */}
-        <div
-          className="flex-1 overflow-x-auto"
-          style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
-        >
-          <div className="flex gap-3 px-4 pt-4 pb-4" style={{ minWidth: 'max-content' }}>
-            {visibleStages.map((stage) => (
-              <div key={stage} style={{ width: 220, height: COLUMN_H, display: 'flex', flexDirection: 'column' }}>
-                <BoardColumn
-                  stage={stage}
-                  leads={leadsByStage[stage]}
-                  onCardClick={(lead) => setSelectedLead(lead)}
-                  onDrop={handleDrop}
-                  onTogglePriority={handleTogglePriority}
-                />
-              </div>
-            ))}
-          </div>
+        {/* Segment bands — page scrolls vertically, each band scrolls horizontally */}
+        <div className="flex flex-col gap-6 px-4 py-4">
+          {bands.map(({ key, leads: bandLeads }) => {
+            const isUnassigned = key === ''
+            if (isUnassigned && bandLeads.length === 0) return null
+            const seg = isUnassigned ? null : SEGMENTS[key as Segment]
+            const byStage = stagesFor(bandLeads)
+
+            return (
+              <section key={key || 'unassigned'} className={`bg-white rounded-2xl border ${seg?.band ?? 'border-gray-200'} overflow-hidden`}>
+                {/* Band header */}
+                <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-gray-100">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border flex-shrink-0 ${seg?.chip ?? 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                      {seg?.short ?? 'Unassigned'}
+                    </span>
+                    <h2 className="text-sm font-semibold text-gray-900 truncate">
+                      {seg?.label ?? 'No segment yet — open a card to assign one'}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {!isUnassigned && <SegmentProgress leads={bandLeads} />}
+                    {!isUnassigned && (
+                      <button
+                        onClick={() => setAddToSegment(key as Segment)}
+                        className="text-xs font-medium text-gray-400 hover:text-gray-700 border border-gray-200 hover:border-gray-300 rounded-lg px-2 py-1 transition-colors"
+                        title={`Add a company to ${seg?.label}`}
+                      >
+                        + Add
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Band board */}
+                {bandLeads.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-gray-400">No accounts in this segment yet. Swipe right in the deck, use + Add, or assign existing cards.</div>
+                ) : (
+                  <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+                    <div className="flex gap-3 px-3 pt-3 pb-3" style={{ minWidth: 'max-content' }}>
+                      {visibleStages.map((stage) => (
+                        <div key={stage} style={{ width: 220, height: COLUMN_H, display: 'flex', flexDirection: 'column' }}>
+                          <BoardColumn
+                            stage={stage}
+                            leads={byStage[stage]}
+                            onCardClick={(lead) => setSelectedLead(lead)}
+                            onDrop={handleDrop}
+                            onTogglePriority={handleTogglePriority}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
+            )
+          })}
         </div>
       </div>
 
@@ -891,6 +1172,7 @@ export default function CRMPage() {
           onClose={() => setSelectedLead(null)}
           onStageChange={handleStageChange}
           onChannelChange={handleChannelChange}
+          onSegmentChange={handleSegmentChange}
           onOpenOutreach={() => setOutreachLead(selectedLead)}
           onReportGenerated={handleReportGenerated}
           onSentMessageSaved={handleSentMessageSaved}
@@ -902,6 +1184,15 @@ export default function CRMPage() {
       {/* Outreach modal */}
       {outreachLead && (
         <OutreachModal lead={outreachLead} onClose={() => setOutreachLead(null)} />
+      )}
+
+      {/* Add company modal */}
+      {addToSegment && (
+        <AddCompanyModal
+          segment={addToSegment}
+          onAdded={handleCompanyAdded}
+          onClose={() => setAddToSegment(null)}
+        />
       )}
     </>
   )

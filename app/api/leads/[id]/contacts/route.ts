@@ -7,12 +7,13 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const { name, title, linkedin_url, twitter_url } = await request.json()
+    const { name, title, email, linkedin_url, twitter_url } = await request.json()
     if (!name?.trim()) return Response.json({ error: 'Name required' }, { status: 400 })
     const contact = await insertContact({
       lead_id: id,
       name: name.trim(),
       title: title?.trim() ?? '',
+      email: email?.trim() ?? '',
       linkedin_url: linkedin_url?.trim() ?? '',
       twitter_url: twitter_url?.trim() ?? '',
       is_primary: false,

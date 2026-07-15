@@ -31,6 +31,8 @@ export async function setupDatabase() {
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS is_priority BOOLEAN NOT NULL DEFAULT FALSE`
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS outreach_channel TEXT DEFAULT NULL`
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS outreach_sent_at TIMESTAMPTZ DEFAULT NULL`
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS segment TEXT NOT NULL DEFAULT ''`
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS company_linkedin_url TEXT DEFAULT ''`
 
   await sql`
     CREATE TABLE IF NOT EXISTS contacts (
@@ -44,6 +46,7 @@ export async function setupDatabase() {
     )
   `
   await sql`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS twitter_url TEXT DEFAULT ''`
+  await sql`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''`
 
   await sql`
     CREATE TABLE IF NOT EXISTS swipe_patterns (
@@ -266,14 +269,16 @@ export async function insertLead(lead: {
   description: string
   signal: string
   use_case: string
+  segment?: string
+  company_linkedin_url?: string
   tier: number
   company_size: string
   funding: string
   why_boundless_fits: string
 }): Promise<Lead> {
   const rows = await sql`
-    INSERT INTO leads (company_name, website_url, description, signal, use_case, tier, company_size, funding, why_boundless_fits)
-    VALUES (${lead.company_name}, ${lead.website_url}, ${lead.description}, ${lead.signal}, ${lead.use_case}, ${lead.tier}, ${lead.company_size}, ${lead.funding}, ${lead.why_boundless_fits})
+    INSERT INTO leads (company_name, website_url, description, signal, use_case, segment, company_linkedin_url, tier, company_size, funding, why_boundless_fits)
+    VALUES (${lead.company_name}, ${lead.website_url}, ${lead.description}, ${lead.signal}, ${lead.use_case}, ${lead.segment ?? ''}, ${lead.company_linkedin_url ?? ''}, ${lead.tier}, ${lead.company_size}, ${lead.funding}, ${lead.why_boundless_fits})
     RETURNING *
   `
   return rows[0] as Lead
@@ -283,13 +288,14 @@ export async function insertContact(contact: {
   lead_id: string
   name: string
   title: string
+  email?: string
   linkedin_url: string
   twitter_url?: string
   is_primary: boolean
 }): Promise<Contact> {
   const rows = await sql`
-    INSERT INTO contacts (lead_id, name, title, linkedin_url, twitter_url, is_primary)
-    VALUES (${contact.lead_id}, ${contact.name}, ${contact.title}, ${contact.linkedin_url}, ${contact.twitter_url ?? ''}, ${contact.is_primary})
+    INSERT INTO contacts (lead_id, name, title, email, linkedin_url, twitter_url, is_primary)
+    VALUES (${contact.lead_id}, ${contact.name}, ${contact.title}, ${contact.email ?? ''}, ${contact.linkedin_url}, ${contact.twitter_url ?? ''}, ${contact.is_primary})
     RETURNING *
   `
   return rows[0] as Contact
@@ -305,6 +311,33 @@ export async function updateCRMStage(leadId: string, stage: CRMStage): Promise<v
 
 export async function setOutreachChannel(leadId: string, channel: OutreachChannel): Promise<void> {
   await sql`UPDATE leads SET outreach_channel = ${channel} WHERE id = ${leadId}`
+}
+
+export async function updateSegment(leadId: string, segment: string): Promise<void> {
+  await sql`UPDATE leads SET segment = ${segment} WHERE id = ${leadId}`
+}
+
+// Manually-added pipeline entry: skips the swipe deck entirely and lands
+// directly in the CRM as an accepted lead in needs_outreach.
+export async function createManualLead(lead: {
+  company_name: string
+  website_url: string
+  company_linkedin_url: string
+  description: string
+  signal: string
+  use_case: string
+  segment: string
+  tier: number
+  company_size: string
+  funding: string
+  why_boundless_fits: string
+}): Promise<Lead> {
+  const rows = await sql`
+    INSERT INTO leads (company_name, website_url, company_linkedin_url, description, signal, use_case, segment, tier, company_size, funding, why_boundless_fits, status, crm_stage, swiped_at)
+    VALUES (${lead.company_name}, ${lead.website_url}, ${lead.company_linkedin_url}, ${lead.description}, ${lead.signal}, ${lead.use_case}, ${lead.segment}, ${lead.tier}, ${lead.company_size}, ${lead.funding}, ${lead.why_boundless_fits}, 'accepted', 'needs_outreach', NOW())
+    RETURNING *
+  `
+  return rows[0] as Lead
 }
 
 export async function saveSentMessage(leadId: string, content: string): Promise<Outreach> {
@@ -349,7 +382,7 @@ export async function getReportForLead(leadId: string): Promise<Outreach | null>
 export async function insertOutreach(outreach: {
   lead_id: string
   contact_id: string | null
-  type: 'linkedin_connection' | 'linkedin_dm' | 'email' | 'research_report'
+  type: 'linkedin_connection' | 'linkedin_dm' | 'email' | 'x_dm' | 'research_report'
   content: string
 }): Promise<Outreach> {
   const rows = await sql`
@@ -381,6 +414,7 @@ export async function getContactById(id: string): Promise<Contact | null> {
 export async function updateContact(id: string, fields: {
   name?: string
   title?: string
+  email?: string
   linkedin_url?: string
   twitter_url?: string
 }): Promise<Contact> {
@@ -389,6 +423,7 @@ export async function updateContact(id: string, fields: {
     SET
       name         = COALESCE(${fields.name         ?? null}, name),
       title        = COALESCE(${fields.title        ?? null}, title),
+      email        = COALESCE(${fields.email        ?? null}, email),
       linkedin_url = COALESCE(${fields.linkedin_url ?? null}, linkedin_url),
       twitter_url  = COALESCE(${fields.twitter_url  ?? null}, twitter_url)
     WHERE id = ${id}

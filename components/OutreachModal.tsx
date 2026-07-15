@@ -8,20 +8,22 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'linkedin_connection' | 'linkedin_dm' | 'email'
+type Tab = 'linkedin_connection' | 'linkedin_dm' | 'email' | 'x_dm'
 
 const TAB_LABELS: Record<Tab, string> = {
+  email: 'Email',
   linkedin_connection: 'Connection Note',
   linkedin_dm: 'LinkedIn DM',
-  email: 'Email',
+  x_dm: 'X DM',
 }
 
 export default function OutreachModal({ lead, onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>('linkedin_connection')
+  const [activeTab, setActiveTab] = useState<Tab>('email')
   const [outreach, setOutreach] = useState<Record<Tab, string>>({
+    email: '',
     linkedin_connection: '',
     linkedin_dm: '',
-    email: '',
+    x_dm: '',
   })
   const [isGenerating, setIsGenerating] = useState(false)
   const [generated, setGenerated] = useState(false)
@@ -54,9 +56,10 @@ export default function OutreachModal({ lead, onClose }: Props) {
       const data = await res.json()
       if (data.outreach) {
         setOutreach({
+          email: data.outreach.email || '',
           linkedin_connection: data.outreach.linkedin_connection || '',
           linkedin_dm: data.outreach.linkedin_dm || '',
-          email: data.outreach.email || '',
+          x_dm: data.outreach.x_dm || '',
         })
         setGenerated(true)
       }

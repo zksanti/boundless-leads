@@ -21,7 +21,7 @@ export async function POST(
     const outreach = await generateOutreach(lead, contact)
 
     // Persist each type
-    const types = ['linkedin_connection', 'linkedin_dm', 'email'] as const
+    const types = ['linkedin_connection', 'linkedin_dm', 'email', 'x_dm'] as const
     for (const type of types) {
       const content = outreach[type]
       if (content) {

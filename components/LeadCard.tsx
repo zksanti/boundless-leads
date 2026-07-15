@@ -1,5 +1,6 @@
-import type { Lead } from '@/lib/types'
+import type { Lead, Segment } from '@/lib/types'
 import { WORKLOADS } from '@/lib/workloads'
+import { SEGMENTS } from '@/lib/segments'
 
 interface Props {
   lead: Lead
@@ -8,21 +9,25 @@ interface Props {
 
 export default function LeadCard({ lead, dimmed = false }: Props) {
   const uc = WORKLOADS[lead.use_case] ?? WORKLOADS.batch
+  const seg = lead.segment ? SEGMENTS[lead.segment as Segment] : null
 
   return (
-    <div
-      className={`w-full rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden select-none transition-opacity ${
-        dimmed ? 'opacity-60' : 'opacity-100'
-      }`}
-    >
+    <div className="relative w-full rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden select-none">
       {/* Header */}
       <div className="px-6 pt-6 pb-4">
         <div className="flex items-center justify-between mb-4">
-          <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${uc.chip}`}
-          >
-            {uc.label}
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {seg && (
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${seg.chip}`}>
+                {seg.short}
+              </span>
+            )}
+            <span
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${uc.chip}`}
+            >
+              {uc.label}
+            </span>
+          </div>
           <span className="text-xs text-gray-400 font-medium">
             Tier {lead.tier}
           </span>
@@ -98,6 +103,10 @@ export default function LeadCard({ lead, dimmed = false }: Props) {
           {lead.why_boundless_fits}
         </p>
       </div>
+
+      {/* Stack cards behind the top card stay opaque (no text bleed-through)
+          and are veiled instead of made transparent. */}
+      {dimmed && <div className="absolute inset-0 bg-white/90 rounded-2xl" />}
     </div>
   )
 }
