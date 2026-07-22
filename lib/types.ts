@@ -42,10 +42,84 @@ export interface Lead {
   is_priority: boolean
   outreach_channel: OutreachChannel | null
   outreach_sent_at: string | null
+  rejection_reason: string
+  validation: ValidationRecord | null
   created_at: string
   swiped_at: string | null
   snooze_until: string | null
 }
+
+// Account research record from the experiment doc, built up conversation by
+// conversation. Lives as one JSONB column on the lead; merged in code so an
+// "unknown" from a short reply never overwrites a confirmed value.
+export interface ValidationRecord {
+  workload: string
+  workload_status: 'confirmed' | 'denied' | 'unknown'
+  current_provider: string
+  pain: string
+  blockers: string[]
+  fit_confidence: 'high' | 'medium' | 'low' | ''
+  open_questions: string[]
+  next_step: string
+}
+
+export interface ConversationAnalysis {
+  primary_tag: string | null
+  secondary_tag: string | null
+  validation: ValidationRecord
+  suggested_stage: CRMStage | null
+  stage_rationale: string
+  learnings: Array<{ category: 'icp' | 'messaging'; content: string }>
+  summary: string
+}
+
+export interface Conversation {
+  id: string
+  lead_id: string
+  kind: string
+  content: string
+  occurred_at: string
+  primary_tag: string
+  secondary_tag: string
+  analysis: ConversationAnalysis | null
+  analyzed_at: string | null
+  created_at: string
+}
+
+export interface Learning {
+  id: string
+  category: 'icp' | 'messaging'
+  segment: Segment | ''
+  content: string
+  source: 'conversation' | 'manual'
+  conversation_id: string | null
+  lead_id: string | null
+  status: 'pending' | 'accepted' | 'rejected'
+  auto_applied: boolean
+  user_feedback: string
+  created_at: string
+  responded_at: string | null
+}
+
+// Versioned living ICP per segment. segments.ts is the v0 seed; once a profile
+// is active for a segment, lead generation reads the profile instead of the
+// static qualification/exclude/signals arrays.
+export interface ICPProfile {
+  id: string
+  segment: Segment
+  version: number
+  qualification: string[]
+  exclude: string[]
+  signals: string[]
+  guidance: string
+  change_summary: string
+  status: 'pending' | 'active' | 'rejected' | 'superseded'
+  source_counts: Record<string, number>
+  created_at: string
+  responded_at: string | null
+}
+
+export type LearningMode = 'review' | 'auto'
 
 export interface PatternInsight {
   id: string

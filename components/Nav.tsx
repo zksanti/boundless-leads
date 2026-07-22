@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 const tabs = [
   { href: '/', label: 'Swipe' },
   { href: '/crm', label: 'Pipeline' },
-  { href: '/patterns', label: 'Patterns' },
+  { href: '/patterns', label: 'Learnings' },
 ]
 
 export default function Nav() {

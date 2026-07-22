@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import OutreachModal from '@/components/OutreachModal'
-import type { LeadWithContacts, CRMStage, UseCase, OutreachChannel, Segment } from '@/lib/types'
+import type { LeadWithContacts, CRMStage, UseCase, OutreachChannel, Segment, Conversation, ValidationRecord } from '@/lib/types'
 import { WORKLOADS, WORKLOAD_KEYS } from '@/lib/workloads'
 import { SEGMENTS, SEGMENT_KEYS } from '@/lib/segments'
+import { CONVERSATION_KINDS, kindLabel, tagLabel } from '@/lib/taxonomy'
+import { ThinkingOrb } from 'thinking-orbs'
 
 const CHANNEL_CONFIG: Record<OutreachChannel, { label: string; badge: string }> = {
   linkedin: { label: 'LinkedIn', badge: 'bg-blue-50 text-blue-700' },
@@ -83,7 +85,7 @@ function EditableContact({ contact, onSaved }: { contact: Contact; onSaved: (c: 
           placeholder="X / Twitter URL" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
         <div className="flex gap-2 pt-0.5">
           <button onClick={save} disabled={saving}
-            className="h-7 px-3 text-xs font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors">
+            className="h-7 px-3 text-xs font-medium bg-gray-900 text-white rounded-full hover:bg-gray-800 disabled:opacity-50 transition-colors">
             {saving ? 'Saving...' : 'Save'}
           </button>
           <button onClick={cancel} className="h-7 px-3 text-xs text-gray-500 hover:text-gray-700 transition-colors">Cancel</button>
@@ -316,7 +318,7 @@ function AddContactForm({ leadId, onSaved, onCancel }: { leadId: string; onSaved
         placeholder="X / Twitter URL" className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300 w-full" />
       <div className="flex gap-2 pt-0.5">
         <button onClick={save} disabled={saving || !fields.name.trim()}
-          className="h-7 px-3 text-xs font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors">
+          className="h-7 px-3 text-xs font-medium bg-gray-900 text-white rounded-full hover:bg-gray-800 disabled:opacity-50 transition-colors">
           {saving ? 'Saving...' : 'Add contact'}
         </button>
         <button onClick={onCancel} className="h-7 px-3 text-xs text-gray-500 hover:text-gray-700 transition-colors">Cancel</button>
@@ -538,7 +540,7 @@ function AddCompanyModal({
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-9 px-4 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancel</button>
           <button onClick={save} disabled={saving || !fields.company_name.trim()}
-            className="h-9 px-4 text-sm font-medium bg-gray-900 text-white rounded-xl hover:bg-gray-800 disabled:opacity-40 transition-colors">
+            className="h-9 px-4 text-sm font-medium bg-gray-900 text-white rounded-full hover:bg-gray-800 disabled:opacity-40 transition-colors">
             {saving ? 'Adding...' : 'Add to pipeline'}
           </button>
         </div>
@@ -573,8 +575,267 @@ function ReportOverlay({ content, onClose }: { content: string; onClose: () => v
           </div>
         </div>
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm bg-gray-900 text-white rounded-xl hover:bg-gray-800">Close</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm bg-gray-900 text-white rounded-full hover:bg-gray-800">Close</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Validation record ─────────────────────────────────────────────────────────
+
+const FIT_CHIP: Record<string, string> = {
+  high:   'bg-emerald-50 text-emerald-700',
+  medium: 'bg-amber-50 text-amber-700',
+  low:    'bg-red-50 text-red-600',
+}
+
+const WORKLOAD_STATUS_CHIP: Record<string, string> = {
+  confirmed: 'bg-emerald-50 text-emerald-700',
+  denied:    'bg-red-50 text-red-600',
+  unknown:   'bg-gray-100 text-gray-500',
+}
+
+function ValidationSection({ validation }: { validation: ValidationRecord }) {
+  const rows: Array<[string, React.ReactNode]> = []
+  if (validation.workload) {
+    rows.push(['Workload', (
+      <span key="w" className="inline-flex items-center gap-1.5">
+        {validation.workload}
+        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${WORKLOAD_STATUS_CHIP[validation.workload_status]}`}>
+          {validation.workload_status}
+        </span>
+      </span>
+    )])
+  }
+  if (validation.current_provider) rows.push(['Provider', validation.current_provider])
+  if (validation.pain) rows.push(['Pain', validation.pain])
+  if (validation.blockers.length > 0) rows.push(['Blockers', validation.blockers.join('; ')])
+  if (validation.next_step) rows.push(['Next step', validation.next_step])
+
+  return (
+    <div className="px-5 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Validation</p>
+        {validation.fit_confidence && (
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${FIT_CHIP[validation.fit_confidence]}`}>
+            {validation.fit_confidence} confidence
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex gap-2 text-sm">
+            <span className="text-gray-400 flex-shrink-0 w-20">{label}</span>
+            <span className="text-gray-700 leading-snug">{value}</span>
+          </div>
+        ))}
+        {validation.open_questions.length > 0 && (
+          <div className="mt-1">
+            <p className="text-xs text-gray-400 mb-1">Open questions</p>
+            {validation.open_questions.map((q, i) => (
+              <p key={i} className="text-sm text-gray-700 pl-4 relative before:content-['·'] before:absolute before:left-1 before:text-gray-400">{q}</p>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Conversations ─────────────────────────────────────────────────────────────
+
+const KIND_BADGE: Record<string, string> = {
+  call_transcript: 'bg-violet-50 text-violet-700',
+  email_reply:     'bg-blue-50 text-blue-700',
+  linkedin_reply:  'bg-sky-50 text-sky-700',
+  x_reply:         'bg-gray-100 text-gray-700',
+  notes:           'bg-amber-50 text-amber-700',
+}
+
+function ConversationEntry({ conv, onDelete }: { conv: Conversation; onDelete: (id: string) => void }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="bg-gray-50 rounded-xl p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${KIND_BADGE[conv.kind] ?? 'bg-gray-100 text-gray-600'}`}>
+            {kindLabel(conv.kind)}
+          </span>
+          <span className="text-xs text-gray-400">{conv.occurred_at?.slice(0, 10)}</span>
+          {conv.primary_tag && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">{tagLabel(conv.primary_tag)}</span>
+          )}
+          {conv.secondary_tag && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50/60 text-indigo-500">{tagLabel(conv.secondary_tag)}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setExpanded((e) => !e)} className="text-xs text-gray-400 hover:text-gray-600">
+            {expanded ? 'Hide' : 'View'}
+          </button>
+          <button onClick={() => onDelete(conv.id)} className="text-gray-300 hover:text-red-500 text-xs" title="Delete">✕</button>
+        </div>
+      </div>
+      {conv.analysis?.summary && (
+        <p className="text-xs text-gray-500 mt-1.5 leading-snug">{conv.analysis.summary}</p>
+      )}
+      {expanded && (
+        <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap leading-relaxed border-t border-gray-200 pt-2">{conv.content}</p>
+      )}
+    </div>
+  )
+}
+
+function ConversationsSection({
+  lead,
+  onValidationUpdated,
+  onApplyStage,
+  currentStage,
+}: {
+  lead: LeadWithContacts
+  onValidationUpdated: (v: ValidationRecord) => void
+  onApplyStage: (stage: CRMStage) => void
+  currentStage: CRMStage
+}) {
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [kind, setKind] = useState<string>('call_transcript')
+  const [content, setContent] = useState('')
+  const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString().slice(0, 10))
+  const [analyzing, setAnalyzing] = useState(false)
+  const [lastResult, setLastResult] = useState<{
+    learningCount: number
+    autoApplied: boolean
+    suggestedStage: CRMStage | null
+    stageRationale: string
+  } | null>(null)
+
+  useEffect(() => {
+    setLastResult(null)
+    setShowForm(false)
+    fetch(`/api/leads/${lead.id}/conversations`)
+      .then((r) => r.json())
+      .then((data) => setConversations(data.conversations ?? []))
+      .catch(() => setConversations([]))
+  }, [lead.id])
+
+  const handleSave = async () => {
+    if (!content.trim() || analyzing) return
+    setAnalyzing(true)
+    setLastResult(null)
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/conversations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: content.trim(), kind, occurred_at: occurredAt }),
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      setConversations((prev) => [data.conversation, ...prev])
+      if (data.validation) onValidationUpdated(data.validation)
+      setLastResult({
+        learningCount: data.learnings?.length ?? 0,
+        autoApplied: data.learnings?.[0]?.auto_applied ?? false,
+        suggestedStage: data.suggestedStage ?? null,
+        stageRationale: data.stageRationale ?? '',
+      })
+      setContent('')
+      setShowForm(false)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    setConversations((prev) => prev.filter((c) => c.id !== id))
+    await fetch(`/api/conversations/${id}`, { method: 'DELETE' })
+  }
+
+  return (
+    <div className="px-5 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between mb-2.5">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conversations</p>
+        {!showForm && (
+          <button onClick={() => setShowForm(true)} className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
+            + Log conversation
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <div className="bg-gray-50 rounded-xl p-3 mb-3 flex flex-col gap-2">
+          <div className="flex gap-2">
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+              className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300"
+            >
+              {CONVERSATION_KINDS.map((k) => (
+                <option key={k.kind} value={k.kind}>{k.label}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={occurredAt}
+              onChange={(e) => setOccurredAt(e.target.value)}
+              className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-300"
+            />
+          </div>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Paste the transcript, reply, or notes..."
+            rows={6}
+            className="w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-y focus:outline-none focus:ring-1 focus:ring-gray-300"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={analyzing || !content.trim()}
+              className="h-8 px-3 text-xs font-medium rounded-full bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition-colors flex items-center gap-2"
+            >
+              {analyzing && <ThinkingOrb state="solving" size={20} theme="dark" />}
+              {analyzing ? 'Analyzing conversation...' : 'Save & analyze'}
+            </button>
+            <button onClick={() => setShowForm(false)} className="h-8 px-3 text-xs text-gray-500 hover:text-gray-700 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {lastResult && (
+        <div className="mb-3 flex flex-col gap-1.5">
+          {lastResult.learningCount > 0 && (
+            <p className="text-xs text-gray-500">
+              {lastResult.learningCount} learning{lastResult.learningCount > 1 ? 's' : ''}{' '}
+              {lastResult.autoApplied ? 'auto-applied' : 'queued for review'}
+            </p>
+          )}
+          {lastResult.suggestedStage && lastResult.suggestedStage !== currentStage && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-500" title={lastResult.stageRationale}>
+                Suggests: <span className="font-medium text-gray-700">{STAGE_CONFIG[lastResult.suggestedStage].label}</span>
+              </span>
+              <button
+                onClick={() => { onApplyStage(lastResult.suggestedStage!); setLastResult((r) => r ? { ...r, suggestedStage: null } : null) }}
+                className="text-xs px-2 py-0.5 rounded-full bg-gray-900 text-white hover:bg-gray-800 transition-colors"
+              >
+                Apply
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {conversations.map((c) => (
+          <ConversationEntry key={c.id} conv={c} onDelete={handleDelete} />
+        ))}
+        {conversations.length === 0 && !showForm && (
+          <p className="text-sm text-gray-400">No conversations logged</p>
+        )}
       </div>
     </div>
   )
@@ -620,6 +881,7 @@ function LeadDrawer({
   const [savingSent, setSavingSent] = useState(false)
   const [sentSaved, setSentSaved] = useState(!!lead.outreach.find((o) => o.type === 'sent_message'))
   const [addingContact, setAddingContact] = useState(false)
+  const [validation, setValidation] = useState<ValidationRecord | null>(lead.validation)
   const drawerRef = useRef<HTMLDivElement>(null)
 
   // Reset when lead changes
@@ -630,8 +892,9 @@ function LeadDrawer({
     setReportContent(lead.outreach.find((o) => o.type === 'research_report')?.content ?? null)
     setSentMessage(lead.outreach.find((o) => o.type === 'sent_message')?.content ?? '')
     setSentSaved(!!lead.outreach.find((o) => o.type === 'sent_message'))
+    setValidation(lead.validation)
     setShowReport(false)
-  }, [lead.id, lead.crm_stage, lead.outreach_channel, lead.segment, lead.outreach])
+  }, [lead.id, lead.crm_stage, lead.outreach_channel, lead.segment, lead.outreach, lead.validation])
 
   const handleSegmentChange = async (segment: Segment | '') => {
     setCurrentSegment(segment)
@@ -824,6 +1087,9 @@ function LeadDrawer({
             <p className="text-sm text-gray-700 leading-relaxed">{lead.why_boundless_fits}</p>
           </div>
 
+          {/* Validation record — built up from analyzed conversations */}
+          {validation && <ValidationSection validation={validation} />}
+
           {/* Contacts */}
           <div className="px-5 py-4 border-b border-gray-100">
             <div className="flex items-center justify-between mb-2.5">
@@ -866,12 +1132,20 @@ function LeadDrawer({
               <button
                 onClick={handleSaveSent}
                 disabled={savingSent || !sentMessage.trim() || sentSaved}
-                className="h-8 px-3 text-xs font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition-colors"
+                className="h-8 px-3 text-xs font-medium rounded-full bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition-colors"
               >
                 {savingSent ? 'Saving...' : sentSaved ? 'Saved' : 'Save message'}
               </button>
             </div>
           )}
+
+          {/* Conversations — transcripts, replies, notes → analyzed */}
+          <ConversationsSection
+            lead={lead}
+            currentStage={currentStage}
+            onValidationUpdated={setValidation}
+            onApplyStage={handleStageChange}
+          />
 
           {/* Actions */}
           <div className="px-5 py-4 flex flex-col gap-2.5">
@@ -880,9 +1154,9 @@ function LeadDrawer({
             {/* Outreach */}
             <button
               onClick={onOpenOutreach}
-              className="w-full h-10 flex items-center justify-center gap-2 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors"
+              className="w-full h-10 flex items-center justify-center gap-2 rounded-full bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
               {lead.outreach.some((o) => o.type !== 'research_report') ? 'View / edit outreach' : 'Generate outreach'}
@@ -896,12 +1170,12 @@ function LeadDrawer({
             >
               {generatingReport ? (
                 <>
-                  <div className="w-4 h-4 border border-gray-500 border-t-transparent rounded-full animate-spin" />
+                  <ThinkingOrb state="composing" size={20} theme="light" />
                   Generating prep brief...
                 </>
               ) : (
                 <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   {reportContent ? 'View call prep brief' : 'Generate call prep brief'}
@@ -916,7 +1190,7 @@ function LeadDrawer({
               rel="noopener noreferrer"
               className="w-full h-10 flex items-center justify-center gap-2 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               Schedule call in Google Calendar
@@ -1062,7 +1336,7 @@ export default function CRMPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-5 h-5 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+        <ThinkingOrb state="working" size={64} theme="light" />
       </div>
     )
   }

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import OutreachModal from '@/components/OutreachModal'
 import type { LeadWithContacts } from '@/lib/types'
 import { WORKLOADS } from '@/lib/workloads'
+import { ThinkingOrb } from 'thinking-orbs'
 
 export default function QueuePage() {
   const [leads, setLeads] = useState<LeadWithContacts[]>([])
@@ -80,7 +81,7 @@ ${lead.why_boundless_fits}
   if (isLoading) {
     return (
       <main className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-5 h-5 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+        <ThinkingOrb state="working" size={64} theme="light" />
       </main>
     )
   }

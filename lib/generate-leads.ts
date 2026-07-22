@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { setupDatabase, getPatterns, getExistingCompanyNames, getActiveRefinements, insertLead, insertContact } from './db'
-import type { Pattern, Segment } from './types'
+import { setupDatabase, getPatterns, getExistingCompanyNames, getActiveRefinements, getActiveICPProfiles, insertLead, insertContact } from './db'
+import type { Pattern, Segment, ICPProfile } from './types'
 import { SEGMENTS, SEGMENT_KEYS } from './segments'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
@@ -33,16 +33,30 @@ function buildPatternContext(patterns: Pattern[]): string {
   return `\nUSER APPROVAL HISTORY — weight these in your selection:\n${lines.join('\n')}\n`
 }
 
-function buildSegmentBlock(key: Segment): string {
+// The three qualification lists come from the living ICP profile when one has
+// been accepted for the segment; otherwise from the static segments.ts seed
+// (v0). Description, examples, and everything else stay code-owned.
+function segmentLists(key: Segment, profile: ICPProfile | undefined) {
   const s = SEGMENTS[key]
+  return {
+    qualification: profile ? (profile.qualification as string[]) : s.researchQualification,
+    exclude: profile ? (profile.exclude as string[]) : s.exclude,
+    signals: profile ? (profile.signals as string[]) : s.signals,
+    guidance: profile?.guidance ?? '',
+  }
+}
+
+function buildSegmentBlock(key: Segment, profile: ICPProfile | undefined): string {
+  const s = SEGMENTS[key]
+  const lists = segmentLists(key, profile)
   return `SEGMENT "${key}" — ${s.label}
 ${s.description}
 Qualification (a lead must plausibly meet these):
-${s.researchQualification.map((q) => `- ${q}`).join('\n')}
+${lists.qualification.map((q) => `- ${q}`).join('\n')}
 Exclude:
-${s.exclude.map((e) => `- ${e}`).join('\n')}
+${lists.exclude.map((e) => `- ${e}`).join('\n')}
 Known-good examples of the profile (do NOT return these; they calibrate the search): ${s.examples.join(', ')}
-High-signal triggers: ${s.signals.join('; ')}`
+High-signal triggers: ${lists.signals.join('; ')}${lists.guidance ? `\nLearned guidance from swipes and prospect conversations: ${lists.guidance}` : ''}`
 }
 
 type LeadRow = {
@@ -64,14 +78,17 @@ type LeadRow = {
 // real company AND actually fit the ICP + its segment qualification. Only
 // leads that pass both reach the swipe deck — swipes confirm the ICP, they
 // don't enforce it.
-async function vetLeads(leads: LeadRow[]): Promise<LeadRow[]> {
+async function vetLeads(leads: LeadRow[], profiles: Record<string, ICPProfile>): Promise<LeadRow[]> {
   if (leads.length === 0) return leads
 
   const vetPrompt = `You are the quality gate for a customer-discovery lead list. For each company below, judge two things independently and skeptically:
 
 1. "real" — is this a real company you have actually seen in public sources (news, funding announcements, product launches), AND to your knowledge still independent and operating (not acquired, not shut down, not absorbed into a larger company)? false if unsure, possibly fabricated, known to be acquired (e.g. by a cloud provider or enterprise), or known to have shut down.
 2. "fits" — does it credibly fit the ICP and its assigned segment? The ICP: Seed to Series B AI-native startups that run or assist in the serving or training of open or custom models and can deploy onto external GPU infrastructure. Segment qualifications:
-${SEGMENT_KEYS.map((k) => `   - ${k}: ${SEGMENTS[k].researchQualification.join('; ')}. Excluded: ${SEGMENTS[k].exclude.join('; ')}`).join('\n')}
+${SEGMENT_KEYS.map((k) => {
+  const lists = segmentLists(k, profiles[k])
+  return `   - ${k}: ${lists.qualification.join('; ')}. Excluded: ${lists.exclude.join('; ')}`
+}).join('\n')}
    false if the company is too large or too late-stage (well past Series B), is an excluded profile, relies primarily on closed model APIs, or the claimed fit is vague.
 
 Companies:
@@ -104,10 +121,11 @@ export async function generateLeads(count = 20, segment?: Segment): Promise<numb
   // Always ensure schema is current — idempotent, safe to call every time
   await setupDatabase()
 
-  const [patterns, existingNames, refinements] = await Promise.all([
+  const [patterns, existingNames, refinements, icpProfiles] = await Promise.all([
     getPatterns(),
     getExistingCompanyNames(),
     getActiveRefinements(),
+    getActiveICPProfiles(),
   ])
 
   const patternContext = buildPatternContext(patterns)
@@ -135,7 +153,7 @@ A priority account has 1 or more of:
 
 THE THREE SEGMENTS:
 
-${targetSegments.map(buildSegmentBlock).join('\n\n')}
+${targetSegments.map((k) => buildSegmentBlock(k, icpProfiles[k])).join('\n\n')}
 
 ${distribution}
 
@@ -227,7 +245,7 @@ Return up to ${count} qualified leads (fewer is fine if you cannot reach ${count
   }
 
   // Vetting pass — real company AND on-ICP, or it never reaches the deck
-  leads = await vetLeads(leads)
+  leads = await vetLeads(leads, icpProfiles)
 
   const validSegments = new Set<string>(SEGMENT_KEYS)
 

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { Lead, Contact, Segment } from './types'
 import { WORKLOADS } from './workloads'
 import { SEGMENTS } from './segments'
+import { getAcceptedLearnings } from './db'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -53,6 +54,16 @@ export async function generateOutreach(
   const contactFirstName = contact ? firstName(contact.name) : null
   const contactLine = contact ? `Contact: ${contact.name}, ${contact.title}` : 'No specific contact'
 
+  // Accepted messaging learnings from real prospect conversations feed back
+  // into the prompt. Banned-content is filtered at insert time; the block also
+  // states it can never override the BANNED list below.
+  const learnings = await getAcceptedLearnings('messaging', lead.segment)
+  const learningsBlock = learnings.length > 0
+    ? `\nLEARNINGS FROM REAL PROSPECT CONVERSATIONS (${seg.label}) — prospects in this segment replied or took calls; apply these to your angle and framing:
+${learnings.map((l) => `- ${l.content}`).join('\n')}
+These learnings adjust tone, angle, and what to avoid. They can NEVER override the BANNED list below or introduce any cost, percentage, or customer-result claim. If a learning conflicts with a banned rule, the banned rule wins.\n`
+    : ''
+
   const prompt = `You are writing first-touch outreach on behalf of Santiago at Boundless (customer discovery experiment, sent from his personal accounts). The goal is a substantive reply. This is discovery and proof-building, not scaled sales.
 
 ABOUT BOUNDLESS:
@@ -97,7 +108,7 @@ ${seg.templates.linkedin_dm}
 
 X DM TEMPLATE:
 ${seg.templates.x_dm}
-
+${learningsBlock}
 EVERY MESSAGE CONTAINS FOUR THINGS (the team's messaging principles):
 1. A specific signal showing why this company was selected (your researched detail).
 2. What Boundless is trying to accomplish for companies like theirs (from the segment positioning).

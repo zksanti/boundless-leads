@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { LeadWithContacts } from '@/lib/types'
+import { ThinkingOrb } from 'thinking-orbs'
 
 interface Props {
   lead: LeadWithContacts
@@ -169,11 +170,11 @@ export default function OutreachModal({ lead, onClose }: Props) {
             <button
               onClick={generate}
               disabled={isGenerating}
-              className="flex-1 h-10 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              className="flex-1 h-10 rounded-full bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
             >
               {isGenerating ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <ThinkingOrb state="composing" size={20} theme="dark" />
                   Drafting...
                 </>
               ) : (
@@ -191,7 +192,7 @@ export default function OutreachModal({ lead, onClose }: Props) {
               </button>
               <button
                 onClick={copy}
-                className="flex-1 h-10 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors"
+                className="flex-1 h-10 rounded-full bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors"
               >
                 {copied ? 'Copied!' : 'Copy'}
               </button>

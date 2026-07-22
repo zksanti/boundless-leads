@@ -5,6 +5,12 @@ import type { Segment } from './types'
 // Used by lead generation (research qualification), outreach generation
 // (positioning + template basis), and the CRM/deck UI (labels + colors).
 //
+// NOTE (living ICP, July 2026): researchQualification / exclude / signals are
+// the v0 SEED only. Once a segment has an accepted icp_profiles row, lead
+// generation reads the profile instead — editing those three arrays here does
+// nothing for that segment. Evolve them on the Learnings page. Everything
+// else (positioning, examples, templates, colors) stays code-owned here.
+//
 // Experiment cohort targets, per segment: 15-20 researched accounts,
 // >=3 substantive replies, >=2 discovery calls, >=1 qualified workload,
 // >=1 accepted benchmark. Pause a segment if <2 accounts respond after

@@ -10,6 +10,7 @@ import {
 } from 'framer-motion'
 import LeadCard from './LeadCard'
 import type { Lead } from '@/lib/types'
+import { ThinkingOrb } from 'thinking-orbs'
 
 interface SwipeDeckProps {
   leads: Lead[]
@@ -152,7 +153,7 @@ export default function SwipeDeck({
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-[520px] gap-3">
-        <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+        <ThinkingOrb state="searching" size={64} theme="light" />
         <p className="text-sm text-gray-400">Loading leads...</p>
       </div>
     )
@@ -163,7 +164,7 @@ export default function SwipeDeck({
       <div className="flex flex-col items-center justify-center h-[520px] gap-3">
         {isGenerating ? (
           <>
-            <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+            <ThinkingOrb state="searching" size={64} theme="light" />
             <p className="text-sm text-gray-400">Finding more leads...</p>
           </>
         ) : (
@@ -173,7 +174,7 @@ export default function SwipeDeck({
             <p className="text-sm text-gray-400">New leads arrive overnight</p>
             <button
               onClick={onEmpty}
-              className="mt-2 px-4 py-2 text-sm bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
+              className="mt-2 px-4 py-2 text-sm bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors"
             >
               Load more now
             </button>
